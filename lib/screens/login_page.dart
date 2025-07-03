@@ -8,6 +8,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  bool _obscurePassword = true;
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -50,12 +51,23 @@ class _LoginScreenState extends State<LoginScreen> {
                           const SizedBox(height: 20),
                           TextFormField(
                             keyboardType: TextInputType.visiblePassword,
+                            obscureText: _obscurePassword,
                             decoration: InputDecoration(
                               labelText: 'Password',
                               hintText: 'Enter your password',
                               prefixIcon: const Icon(Icons.password),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(30),
+                              ),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _obscurePassword = !_obscurePassword;
+                                  });
+                                },
                               ),
                             ),
                           ),
@@ -83,20 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
-          Positioned(
-            bottom: 20,
-            right: 20,
-            child: TextButton(
-              onPressed: () {
-                // Add admin login navigation
-              },
-              child: const Text(
-                'Admin Login',
-                style: TextStyle(color: Colors.blue),
-              ),
-            ),
-          ),
-        ],
+                  ],
       ),
     );
   }
