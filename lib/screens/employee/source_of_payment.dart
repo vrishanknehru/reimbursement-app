@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/screens/employee/upload_details.dart';
 
 class SourcePage extends StatelessWidget {
   const SourcePage({super.key});
@@ -18,7 +19,10 @@ class SourcePage extends StatelessWidget {
                   minimumSize: const Size.fromHeight(60),
                 ),
                 onPressed: () {
-                  // handle personal card
+                   Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => UploadDetails()),
+                  );
                 },
                 child: const Text("Personal Card"),
               ),
@@ -28,7 +32,10 @@ class SourcePage extends StatelessWidget {
                   minimumSize: const Size.fromHeight(60),
                 ),
                 onPressed: () {
-                  // handle company card
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => UploadDetails()),
+                  );
                 },
                 child: const Text("Company Card"),
               ),
