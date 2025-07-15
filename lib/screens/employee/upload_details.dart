@@ -1,9 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
+import 'package:intl/intl.dart'; // ✅ Already included
+import 'package:flutter/services.dart';
 import 'package:flutter_application_1/screens/employee/employee_home.dart';
 
 class UploadDetails extends StatefulWidget {
-  const UploadDetails({super.key});
+  final String? scannedAmount; // ✅ Added
+  final String? scannedInvoice; // ✅ Added
+  final String? scannedDate; // ✅ Added
+
+  const UploadDetails({
+    super.key,
+    this.scannedAmount,
+    this.scannedInvoice,
+    this.scannedDate,
+  });
 
   @override
   State<UploadDetails> createState() => _UploadDetailsState();
@@ -21,22 +32,46 @@ class _UploadDetailsState extends State<UploadDetails> {
   final List<String> purposeOptions = [
     "Travel & Logistics",
     "Work Essentials",
-    "Client & Team Expenses"
+    "Client & Team Expenses",
   ];
 
-  final List<String> sourceOptions = [
-    "Personal Card",
-    "Company Card"
-  ];
+  final List<String> sourceOptions = ["Personal Card", "Company Card"];
+
+  @override
+  void initState() {
+    super.initState();
+    // ✅ Fill controllers if scanned data is available
+    if (widget.scannedDate != null) {
+      _dateController.text = widget.scannedDate!;
+    }
+    if (widget.scannedInvoice != null) {
+      _invoiceController.text = widget.scannedInvoice!;
+    }
+    if (widget.scannedAmount != null) {
+      _amountController.text = widget.scannedAmount!;
+    }
+  }
 
   void _submitData() async {
+    if (_selectedPurpose == null ||
+        _selectedSource == null ||
+        _dateController.text.isEmpty ||
+        _invoiceController.text.isEmpty ||
+        _amountController.text.isEmpty ||
+        _descriptionController.text.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Please fill all fields")));
+      return;
+    }
+
     var box = Hive.box('userBox');
 
     var entry = {
       'purpose': _selectedPurpose,
       'source': _selectedSource,
       'date': _dateController.text,
-      'invoice': _invoiceController.text,
+      'invoiceNumber': _invoiceController.text,
       'amount': _amountController.text,
       'description': _descriptionController.text,
       'status': 'Pending',
@@ -70,7 +105,6 @@ class _UploadDetailsState extends State<UploadDetails> {
         child: SingleChildScrollView(
           child: Column(
             children: [
-              // Purpose dropdown
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(
                   labelText: "Purpose of Expense",
@@ -78,10 +112,7 @@ class _UploadDetailsState extends State<UploadDetails> {
                 ),
                 value: _selectedPurpose,
                 items: purposeOptions.map((purpose) {
-                  return DropdownMenuItem(
-                    value: purpose,
-                    child: Text(purpose),
-                  );
+                  return DropdownMenuItem(value: purpose, child: Text(purpose));
                 }).toList(),
                 onChanged: (value) {
                   setState(() {
@@ -91,7 +122,6 @@ class _UploadDetailsState extends State<UploadDetails> {
               ),
               const SizedBox(height: 16),
 
-              // Source dropdown
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(
                   labelText: "Source of Payment",
@@ -99,10 +129,7 @@ class _UploadDetailsState extends State<UploadDetails> {
                 ),
                 value: _selectedSource,
                 items: sourceOptions.map((source) {
-                  return DropdownMenuItem(
-                    value: source,
-                    child: Text(source),
-                  );
+                  return DropdownMenuItem(value: source, child: Text(source));
                 }).toList(),
                 onChanged: (value) {
                   setState(() {
@@ -112,18 +139,34 @@ class _UploadDetailsState extends State<UploadDetails> {
               ),
               const SizedBox(height: 16),
 
-              // Date input
               TextFormField(
                 controller: _dateController,
+                readOnly: true,
                 decoration: const InputDecoration(
                   labelText: "Date",
-                  hintText: "Enter date (e.g., 2023-07-01)",
+                  hintText: "Select date",
                   border: OutlineInputBorder(),
+                  suffixIcon: Icon(Icons.calendar_today),
                 ),
+                onTap: () async {
+                  DateTime? pickedDate = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                  );
+                  if (pickedDate != null) {
+                    String formattedDate = DateFormat(
+                      'yyyy-MM-dd',
+                    ).format(pickedDate);
+                    setState(() {
+                      _dateController.text = formattedDate;
+                    });
+                  }
+                },
               ),
               const SizedBox(height: 16),
 
-              // Invoice number input
               TextFormField(
                 controller: _invoiceController,
                 decoration: const InputDecoration(
@@ -134,10 +177,10 @@ class _UploadDetailsState extends State<UploadDetails> {
               ),
               const SizedBox(height: 16),
 
-              // Amount input
               TextFormField(
                 controller: _amountController,
                 keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: const InputDecoration(
                   labelText: "Amount",
                   hintText: "Enter amount",
@@ -146,7 +189,6 @@ class _UploadDetailsState extends State<UploadDetails> {
               ),
               const SizedBox(height: 16),
 
-              // Description input
               TextFormField(
                 controller: _descriptionController,
                 maxLines: 3,
@@ -158,7 +200,6 @@ class _UploadDetailsState extends State<UploadDetails> {
               ),
               const SizedBox(height: 24),
 
-              // Submit button
               ElevatedButton(
                 onPressed: _submitData,
                 child: const Text("Submit"),

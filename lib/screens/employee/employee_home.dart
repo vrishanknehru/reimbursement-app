@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/screens/employee/take_img.dart';
+// import 'package:flutter_application_1/screens/employee/take_img.dart';
+// import 'package:flutter_application_1/screens/employee/upload_details.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_application_1/screens/employee/history_page.dart';
-// ignore: unused_import
-import 'package:flutter_application_1/screens/employee/take_img.dart'; // renamed widget file
-
 
 class EmployeeHome extends StatelessWidget {
   const EmployeeHome({super.key});
@@ -52,20 +52,38 @@ class EmployeeHome extends StatelessWidget {
               itemBuilder: (context, index) {
                 final entry = recentEntries[index];
                 return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   child: ListTile(
                     dense: true,
                     title: Text(
                       "${entry['purpose']} - ${entry['source']}",
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
                     ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text("Date: ${entry['date'] ?? ''}", style: const TextStyle(fontSize: 12)),
-                        Text("Invoice: ${entry['invoiceNumber'] ?? ''}", style: const TextStyle(fontSize: 12)),
-                        Text("Amount: ${entry['amount'] ?? ''}", style: const TextStyle(fontSize: 12)),
-                        Text("Desc: ${entry['description'] ?? ''}", style: const TextStyle(fontSize: 12)),
+                        Text(
+                          "Date: ${entry['date'] ?? ''}",
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        Text(
+                          "Invoice: ${entry['invoiceNumber'] ?? ''}",
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        Text(
+                          "Amount: ${entry['amount'] ?? ''}",
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        Text(
+                          "Desc: ${entry['description'] ?? ''}",
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ],
                     ),
                   ),
@@ -93,7 +111,7 @@ class EmployeeHome extends StatelessWidget {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => TakeImagePage()),
+            MaterialPageRoute(builder: (context) => const TakeImagePage()),
           );
         },
         child: const Icon(Icons.add),
