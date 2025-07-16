@@ -1,7 +1,7 @@
-import 'dart:io'; // ✅ Added for File
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:google_ml_kit/google_ml_kit.dart'; // ✅ Added for OCR
+import 'package:google_ml_kit/google_ml_kit.dart';
 import 'upload_details.dart';
 
 class TakeImagePage extends StatefulWidget {
@@ -13,49 +13,66 @@ class TakeImagePage extends StatefulWidget {
 
 class _TakeImagePageState extends State<TakeImagePage> {
   final ImagePicker _picker = ImagePicker();
-
+  // selecting image
   Future<void> _pickImage(ImageSource source) async {
     final XFile? pickedFile = await _picker.pickImage(source: source);
     if (pickedFile == null) return;
 
     File imageFile = File(pickedFile.path);
 
-    // ✅ OCR logic
+    // processing text from the image
     final inputImage = InputImage.fromFile(imageFile);
     final textRecognizer = GoogleMlKit.vision.textRecognizer();
-    final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
+    final RecognizedText recognizedText = await textRecognizer.processImage(
+      inputImage,
+    );
     await textRecognizer.close();
 
     String rawText = recognizedText.text;
+    print(rawText);
 
-    // ✅ Simple parsing logic (basic)
+    // initializing variables
     String? amount;
     String? invoice;
     String? date;
 
-    // Regex for amount
-    RegExp amountRegex = RegExp(r'(\d+[.,]?\d*)');
-    if (rawText.contains("Total")) {
-      int index = rawText.indexOf("Total");
-      String sub = rawText.substring(index);
-      Match? m = amountRegex.firstMatch(sub);
-      if (m != null) {
-        amount = m.group(0);
+    //amt
+
+    RegExp amountRegex = RegExp(r'\$([0-9]+[.,]?[0-9]*)');
+    Iterable<Match> allAmountMatches = amountRegex.allMatches(rawText);
+
+    if (allAmountMatches.isNotEmpty) {
+      Match lastAmountMatch = allAmountMatches.last;
+      amount = lastAmountMatch.group(1);
+    }
+    List<String> lines = rawText.split('\n');
+
+    //invoice
+
+    for (int i = 0; i < lines.length; i++) {
+      String line = lines[i];
+      if (line.toLowerCase().contains("invoice")) {
+        RegExp numberRegex = RegExp(r'\d{3,}');
+        Match? match = numberRegex.firstMatch(line);
+        if (match != null) {
+          invoice = match.group(0);
+          break;
+        } else if (i + 1 < lines.length) {
+          String nextLine = lines[i + 1];
+          Match? nextMatch = numberRegex.firstMatch(nextLine);
+          if (nextMatch != null) {
+            invoice = nextMatch.group(0);
+            break;
+          }
+        }
       }
     }
 
-    // Regex for invoice number (example)
-    RegExp invoiceRegex = RegExp(r'Invoice\s*No\.?\s*\d+', caseSensitive: false);
-    Match? invMatch = invoiceRegex.firstMatch(rawText);
-    if (invMatch != null) {
-      invoice = invMatch.group(0)?.replaceAll(RegExp(r'[^0-9]'), '');
-    }
-
-    // Regex for date (yyyy-mm-dd or similar)
-    RegExp dateRegex = RegExp(r'\d{4}[-/]\d{2}[-/]\d{2}');
+    // Date
+    RegExp dateRegex = RegExp(r'\d{2}\s*/\s*\d{2}\s*/\s*\d{4}');
     Match? dateMatch = dateRegex.firstMatch(rawText);
     if (dateMatch != null) {
-      date = dateMatch.group(0);
+      date = dateMatch.group(0)?.replaceAll(RegExp(r'\s'), '');
     }
 
     if (mounted) {
@@ -66,6 +83,7 @@ class _TakeImagePageState extends State<TakeImagePage> {
             scannedAmount: amount,
             scannedInvoice: invoice,
             scannedDate: date,
+            imageFile: imageFile,
           ),
         ),
       );

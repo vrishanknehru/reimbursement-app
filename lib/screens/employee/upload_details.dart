@@ -1,19 +1,22 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
-import 'package:intl/intl.dart'; // ✅ Already included
+import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_application_1/screens/employee/employee_home.dart';
 
 class UploadDetails extends StatefulWidget {
-  final String? scannedAmount; // ✅ Added
-  final String? scannedInvoice; // ✅ Added
-  final String? scannedDate; // ✅ Added
+  final String? scannedAmount;
+  final String? scannedInvoice;
+  final String? scannedDate;
+  final File? imageFile;
 
   const UploadDetails({
     super.key,
     this.scannedAmount,
     this.scannedInvoice,
     this.scannedDate,
+    this.imageFile,
   });
 
   @override
@@ -40,7 +43,7 @@ class _UploadDetailsState extends State<UploadDetails> {
   @override
   void initState() {
     super.initState();
-    // ✅ Fill controllers if scanned data is available
+
     if (widget.scannedDate != null) {
       _dateController.text = widget.scannedDate!;
     }
@@ -74,7 +77,8 @@ class _UploadDetailsState extends State<UploadDetails> {
       'invoiceNumber': _invoiceController.text,
       'amount': _amountController.text,
       'description': _descriptionController.text,
-      'status': 'Pending',
+      'status': 'processing',
+      'imagePath': widget.imageFile?.path,
     };
 
     List existing = box.get('entries', defaultValue: []);
@@ -199,6 +203,31 @@ class _UploadDetailsState extends State<UploadDetails> {
                 ),
               ),
               const SizedBox(height: 24),
+
+              // display image preview if imageFile is not null
+              if (widget.imageFile != null)
+                GestureDetector(
+                  onTap: () {
+                    // Show full screen image
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => Scaffold(
+                          appBar: AppBar(title: const Text("Image Preview")),
+                          body: Center(child: Image.file(widget.imageFile!)),
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 10),
+                    height: 150,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey),
+                    ),
+                    child: Image.file(widget.imageFile!, fit: BoxFit.cover),
+                  ),
+                ),
 
               ElevatedButton(
                 onPressed: _submitData,

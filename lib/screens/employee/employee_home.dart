@@ -1,19 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/screens/employee/take_img.dart';
-// import 'package:flutter_application_1/screens/employee/take_img.dart';
-// import 'package:flutter_application_1/screens/employee/upload_details.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_application_1/screens/employee/history_page.dart';
 
 class EmployeeHome extends StatelessWidget {
   const EmployeeHome({super.key});
 
+  
+  Widget _buildStatusIcon(String status) {
+    if (status == 'approved') {
+      return const Icon(Icons.check_circle, color: Colors.green);
+    } else if (status == 'rejected') {
+      return const Icon(Icons.cancel, color: Colors.red);
+    } else {
+     
+      return const Icon(Icons.hourglass_top, color: Colors.orange);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     var box = Hive.box('userBox');
     List entries = box.get('entries', defaultValue: []);
 
-    // Take last 4 entries only
+    
     List recentEntries = entries.reversed.take(5).toList();
 
     return Scaffold(
@@ -86,6 +96,7 @@ class EmployeeHome extends StatelessWidget {
                         ),
                       ],
                     ),
+                    trailing: _buildStatusIcon(entry['status'] ?? 'processing'),
                   ),
                 );
               },
@@ -95,6 +106,18 @@ class EmployeeHome extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
+            IconButton(
+              icon: Icon(Icons.delete_forever),
+              onPressed: () async {
+                var box = Hive.box('userBox');
+                await box.clear();
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('All local entries cleared!')),
+                );
+              },
+            ),
+
             IconButton(
               icon: const Icon(Icons.history),
               onPressed: () {
