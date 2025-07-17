@@ -13,14 +13,15 @@ class TakeImagePage extends StatefulWidget {
 
 class _TakeImagePageState extends State<TakeImagePage> {
   final ImagePicker _picker = ImagePicker();
-  // selecting image
+
+  // Reusable function to handle both camera and gallery input
   Future<void> _pickImage(ImageSource source) async {
     final XFile? pickedFile = await _picker.pickImage(source: source);
     if (pickedFile == null) return;
 
     File imageFile = File(pickedFile.path);
 
-    // processing text from the image
+    // Run OCR
     final inputImage = InputImage.fromFile(imageFile);
     final textRecognizer = GoogleMlKit.vision.textRecognizer();
     final RecognizedText recognizedText = await textRecognizer.processImage(
@@ -29,37 +30,31 @@ class _TakeImagePageState extends State<TakeImagePage> {
     await textRecognizer.close();
 
     String rawText = recognizedText.text;
-    print(rawText);
+    print("Extracted Text:\n$rawText");
 
-    // initializing variables
+    // Extract values
     String? amount;
     String? invoice;
     String? date;
 
-    //amt
-
+    // Amount
     RegExp amountRegex = RegExp(r'\$([0-9]+[.,]?[0-9]*)');
     Iterable<Match> allAmountMatches = amountRegex.allMatches(rawText);
-
     if (allAmountMatches.isNotEmpty) {
-      Match lastAmountMatch = allAmountMatches.last;
-      amount = lastAmountMatch.group(1);
+      amount = allAmountMatches.last.group(1);
     }
+
+    // Invoice
     List<String> lines = rawText.split('\n');
-
-    //invoice
-
     for (int i = 0; i < lines.length; i++) {
-      String line = lines[i];
-      if (line.toLowerCase().contains("invoice")) {
+      if (lines[i].toLowerCase().contains("invoice")) {
         RegExp numberRegex = RegExp(r'\d{3,}');
-        Match? match = numberRegex.firstMatch(line);
+        Match? match = numberRegex.firstMatch(lines[i]);
         if (match != null) {
           invoice = match.group(0);
           break;
         } else if (i + 1 < lines.length) {
-          String nextLine = lines[i + 1];
-          Match? nextMatch = numberRegex.firstMatch(nextLine);
+          Match? nextMatch = numberRegex.firstMatch(lines[i + 1]);
           if (nextMatch != null) {
             invoice = nextMatch.group(0);
             break;

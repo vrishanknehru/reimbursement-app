@@ -33,7 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Your image above email and password
                 Image.asset(
                   'assets/clogo.png.png',
-                  width: 300, // you can adjust this
+                  width: 300, 
                   fit: BoxFit.contain,
                 ),
                 const SizedBox(height: 20), // spacing between image and form

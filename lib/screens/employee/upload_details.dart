@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_application_1/screens/employee/employee_home.dart';
+import 'employee_home.dart';
 
 class UploadDetails extends StatefulWidget {
   final String? scannedAmount;
@@ -43,16 +43,9 @@ class _UploadDetailsState extends State<UploadDetails> {
   @override
   void initState() {
     super.initState();
-
-    if (widget.scannedDate != null) {
-      _dateController.text = widget.scannedDate!;
-    }
-    if (widget.scannedInvoice != null) {
-      _invoiceController.text = widget.scannedInvoice!;
-    }
-    if (widget.scannedAmount != null) {
-      _amountController.text = widget.scannedAmount!;
-    }
+    if (widget.scannedDate != null) _dateController.text = widget.scannedDate!;
+    if (widget.scannedInvoice != null) _invoiceController.text = widget.scannedInvoice!;
+    if (widget.scannedAmount != null) _amountController.text = widget.scannedAmount!;
   }
 
   void _submitData() async {
@@ -62,9 +55,7 @@ class _UploadDetailsState extends State<UploadDetails> {
         _invoiceController.text.isEmpty ||
         _amountController.text.isEmpty ||
         _descriptionController.text.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Please fill all fields")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please fill all fields")));
       return;
     }
 
@@ -85,10 +76,7 @@ class _UploadDetailsState extends State<UploadDetails> {
     existing.add(entry);
     await box.put('entries', existing);
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const EmployeeHome()),
-    );
+    Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const EmployeeHome()));
   }
 
   @override
@@ -118,11 +106,7 @@ class _UploadDetailsState extends State<UploadDetails> {
                 items: purposeOptions.map((purpose) {
                   return DropdownMenuItem(value: purpose, child: Text(purpose));
                 }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedPurpose = value;
-                  });
-                },
+                onChanged: (value) => setState(() => _selectedPurpose = value),
               ),
               const SizedBox(height: 16),
 
@@ -135,11 +119,7 @@ class _UploadDetailsState extends State<UploadDetails> {
                 items: sourceOptions.map((source) {
                   return DropdownMenuItem(value: source, child: Text(source));
                 }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedSource = value;
-                  });
-                },
+                onChanged: (value) => setState(() => _selectedSource = value),
               ),
               const SizedBox(height: 16),
 
@@ -160,11 +140,8 @@ class _UploadDetailsState extends State<UploadDetails> {
                     lastDate: DateTime(2100),
                   );
                   if (pickedDate != null) {
-                    String formattedDate = DateFormat(
-                      'yyyy-MM-dd',
-                    ).format(pickedDate);
                     setState(() {
-                      _dateController.text = formattedDate;
+                      _dateController.text = DateFormat('yyyy-MM-dd').format(pickedDate);
                     });
                   }
                 },
@@ -175,7 +152,6 @@ class _UploadDetailsState extends State<UploadDetails> {
                 controller: _invoiceController,
                 decoration: const InputDecoration(
                   labelText: "Invoice Number",
-                  hintText: "Enter invoice number",
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -187,7 +163,6 @@ class _UploadDetailsState extends State<UploadDetails> {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: const InputDecoration(
                   labelText: "Amount",
-                  hintText: "Enter amount",
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -198,41 +173,31 @@ class _UploadDetailsState extends State<UploadDetails> {
                 maxLines: 3,
                 decoration: const InputDecoration(
                   labelText: "Description",
-                  hintText: "Enter description",
                   border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 24),
 
-              // display image preview if imageFile is not null
               if (widget.imageFile != null)
                 GestureDetector(
                   onTap: () {
-                    // Show full screen image
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => Scaffold(
-                          appBar: AppBar(title: const Text("Image Preview")),
-                          body: Center(child: Image.file(widget.imageFile!)),
-                        ),
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => Scaffold(
+                        appBar: AppBar(title: const Text("Attached Image")),
+                        body: Center(child: Image.file(widget.imageFile!)),
                       ),
-                    );
+                    ));
                   },
                   child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 10),
-                    height: 150,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey),
-                    ),
+                    height: 120,
+                    width: 120,
+                    decoration: BoxDecoration(border: Border.all(color: Colors.grey)),
                     child: Image.file(widget.imageFile!, fit: BoxFit.cover),
                   ),
                 ),
 
-              ElevatedButton(
-                onPressed: _submitData,
-                child: const Text("Submit"),
-              ),
+              const SizedBox(height: 20),
+              ElevatedButton(onPressed: _submitData, child: const Text("Submit")),
             ],
           ),
         ),
