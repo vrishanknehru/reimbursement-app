@@ -115,7 +115,9 @@ class _UploadDetailsState extends State<UploadDetails> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const EmployeeHome()),
+        MaterialPageRoute(
+          builder: (_) => EmployeeHome(email: user.email ?? ''),
+        ),
       );
     } catch (e) {
       ScaffoldMessenger.of(
@@ -183,12 +185,10 @@ class _UploadDetailsState extends State<UploadDetails> {
                     firstDate: DateTime(2000),
                     lastDate: DateTime(2100),
                   );
-                  if (picked != null) {
-                    _dateController.text = DateFormat(
-                      'yyyy-MM-dd',
-                    ).format(picked);
-                  }
-                },
+                  _dateController.text = DateFormat(
+                    'yyyy-MM-dd',
+                  ).format(picked!);
+                                },
               ),
               const SizedBox(height: 16),
 

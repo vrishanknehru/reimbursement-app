@@ -25,18 +25,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
+    final supabase = Supabase.instance.client;
 
     try {
-      final supabase = Supabase.instance.client;
-
+      // Direct query to your 'users' table for authentication
       final response = await supabase
-          .from('users')
+          .from('users') // Changed from 'profiles' back to 'users'
           .select()
           .eq('email', email)
-          .eq('password', password)
-          .maybeSingle(); // Use maybeSingle to safely return null if no match
-
-      print('Supabase login response: $response');
+          .eq('password', password) // Comparing plain text password
+          .maybeSingle();
 
       if (response == null) {
         setState(() {
@@ -45,7 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      final role = response['role']?.toString().toLowerCase(); // Normalize role
+      final role = response['role']?.toString().toLowerCase();
 
       if (role == 'admin') {
         Navigator.pushReplacement(
@@ -55,7 +53,8 @@ class _LoginScreenState extends State<LoginScreen> {
       } else if (role == 'employee') {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const EmployeeHome()),
+          // Passing email as before
+          MaterialPageRoute(builder: (context) => EmployeeHome(email: email)),
         );
       } else {
         setState(() {
@@ -66,7 +65,6 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         errorMessage = 'Login failed. Please try again.';
       });
-      print('Login error: $e');
     } finally {
       setState(() {
         isLoading = false;
@@ -78,90 +76,74 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        color: const Color.fromARGB(246, 255, 255, 255),
+        color: Colors.white,
         child: Center(
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Image.asset(
-                  'assets/clogo.png.png',
-                  width: 300,
-                  fit: BoxFit.contain,
-                ),
+                Image.asset('assets/clogo.png.png', width: 300),
                 const SizedBox(height: 20),
                 Padding(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 30,
-                    horizontal: 20,
-                  ),
-                  child: Form(
-                    child: Column(
-                      children: [
-                        TextFormField(
-                          controller: emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: InputDecoration(
-                            labelText: 'Email',
-                            hintText: 'Enter your email',
-                            prefixIcon: const Icon(Icons.email),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(30),
-                            ),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    children: [
+                      TextFormField(
+                        controller: emailController,
+                        decoration: InputDecoration(
+                          labelText: 'Email',
+                          prefixIcon: const Icon(Icons.email),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30),
                           ),
                         ),
-                        const SizedBox(height: 20),
-                        TextFormField(
-                          controller: passwordController,
-                          keyboardType: TextInputType.visiblePassword,
-                          obscureText: _obscurePassword,
-                          decoration: InputDecoration(
-                            labelText: 'Password',
-                            hintText: 'Enter your password',
-                            prefixIcon: const Icon(Icons.password),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(30),
+                      ),
+                      const SizedBox(height: 20),
+                      TextFormField(
+                        controller: passwordController,
+                        obscureText: _obscurePassword,
+                        decoration: InputDecoration(
+                          labelText: 'Password',
+                          prefixIcon: const Icon(Icons.lock),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
                             ),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility
-                                    : Icons.visibility_off,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
-                              },
-                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
                           ),
                         ),
-                        const SizedBox(height: 20),
-                        if (errorMessage.isNotEmpty)
-                          Text(
-                            errorMessage,
-                            style: const TextStyle(color: Colors.red),
-                          ),
-                        const SizedBox(height: 10),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: MaterialButton(
-                            minWidth: double.infinity,
-                            onPressed: isLoading ? null : loginUser,
-                            color: Colors.black,
-                            textColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                            child: isLoading
-                                ? const CircularProgressIndicator(
-                                    color: Colors.white,
-                                  )
-                                : const Text('Login'),
-                          ),
+                      ),
+                      const SizedBox(height: 20),
+                      if (errorMessage.isNotEmpty)
+                        Text(
+                          errorMessage,
+                          style: const TextStyle(color: Colors.red),
                         ),
-                      ],
-                    ),
+                      const SizedBox(height: 10),
+                      MaterialButton(
+                        minWidth: double.infinity,
+                        onPressed: isLoading ? null : loginUser,
+                        color: Colors.black,
+                        textColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        child: isLoading
+                            ? const CircularProgressIndicator(
+                                color: Colors.white,
+                              )
+                            : const Text('Login'),
+                      ),
+                    ],
                   ),
                 ),
               ],

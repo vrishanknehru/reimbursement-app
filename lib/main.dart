@@ -12,10 +12,9 @@ void main() async {
 
   // 🧬 Initialize Supabase
   await Supabase.initialize(
-    url:
-        'https://ahhtejzpkdfkneawvtuy.supabase.co', // 🔗 Get this from Supabase dashboard
+    url: 'https://ahhtejzpkdfkneawvtuy.supabase.co',
     anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFoaHRlanpwa2Rma25lYXd2dHV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI4MTg3NjMsImV4cCI6MjA2ODM5NDc2M30.Nkl1IJMjziOnp6qH0tCO4M4qJ_l08tCgJNwdw4rND_Y', // 🔑 From Supabase Project Settings > API
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFoaHRlanpwa2Rma25lYXd2dHV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI4MTg3NjMsImV4cCI6MjA2ODM5NDc2M30.Nkl1IJMjziOnp6qH0tCO4M4qJ_l08tCgJNwdw4rND_Y',
   );
 
   runApp(const MyApp());
