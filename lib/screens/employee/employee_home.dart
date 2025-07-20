@@ -1,56 +1,105 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/screens/employee/take_img.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_application_1/screens/employee/history_page.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-class EmployeeHome extends StatelessWidget {
+class EmployeeHome extends StatefulWidget {
   const EmployeeHome({super.key});
 
-  
-  Widget _buildStatusIcon(String status) {
-    if (status == 'approved') {
-      return const Icon(Icons.check_circle, color: Colors.green);
-    } else if (status == 'rejected') {
-      return const Icon(Icons.cancel, color: Colors.red);
-    } else {
-     
-      return const Icon(Icons.hourglass_top, color: Colors.orange);
+  @override
+  State<EmployeeHome> createState() => _EmployeeHomeState();
+}
+
+class _EmployeeHomeState extends State<EmployeeHome> {
+  final supabase = Supabase.instance.client;
+  List<Map<String, dynamic>> userBills = [];
+  bool isLoading = true;
+  String? errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchBills();
+  }
+
+  Future<void> _fetchBills() async {
+    final userId = supabase.auth.currentUser?.id;
+    if (userId == null) {
+      setState(() {
+        isLoading = false;
+        errorMessage = "User not logged in";
+      });
+      return;
+    }
+
+    try {
+      final response = await supabase
+          .from('bills')
+          .select()
+          .eq('user_id', userId)
+          .order('created_at', ascending: false)
+          .limit(5);
+
+      setState(() {
+        userBills = List<Map<String, dynamic>>.from(response);
+        isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        errorMessage = e.toString();
+        isLoading = false;
+      });
+    }
+  }
+
+  Widget _buildStatusIcon(String? status) {
+    switch (status) {
+      case 'approved':
+        return const Icon(Icons.check_circle, color: Colors.green);
+      case 'rejected':
+        return const Icon(Icons.cancel, color: Colors.red);
+      default:
+        return const Icon(Icons.hourglass_top, color: Colors.orange);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    var box = Hive.box('userBox');
-    List entries = box.get('entries', defaultValue: []);
-
-    
-    List recentEntries = entries.reversed.take(5).toList();
-
     return Scaffold(
       appBar: AppBar(
         title: Row(children: [const Text("Home"), const Spacer()]),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () {
-              Navigator.pop(context);
+            onPressed: () async {
+              await supabase.auth.signOut();
+              if (mounted) Navigator.pop(context);
             },
           ),
         ],
       ),
-      body: recentEntries.isEmpty
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : errorMessage != null
+          ? Center(
+              child: Text(
+                errorMessage!,
+                style: const TextStyle(color: Colors.red),
+              ),
+            )
+          : userBills.isEmpty
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.description, size: 80, color: Colors.grey),
-                  const SizedBox(height: 20),
-                  const Text(
+                children: const [
+                  Icon(Icons.description, size: 80, color: Colors.grey),
+                  SizedBox(height: 20),
+                  Text(
                     "No bill uploaded yet",
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 10),
-                  const Text(
+                  SizedBox(height: 10),
+                  Text(
                     "Status: N/A",
                     style: TextStyle(fontSize: 16, color: Colors.grey),
                   ),
@@ -58,9 +107,9 @@ class EmployeeHome extends StatelessWidget {
               ),
             )
           : ListView.builder(
-              itemCount: recentEntries.length,
+              itemCount: userBills.length,
               itemBuilder: (context, index) {
-                final entry = recentEntries[index];
+                final entry = userBills[index];
                 return Card(
                   margin: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -83,7 +132,7 @@ class EmployeeHome extends StatelessWidget {
                           style: const TextStyle(fontSize: 12),
                         ),
                         Text(
-                          "Invoice: ${entry['invoiceNumber'] ?? ''}",
+                          "Invoice: ${entry['invoice'] ?? ''}",
                           style: const TextStyle(fontSize: 12),
                         ),
                         Text(
@@ -97,6 +146,9 @@ class EmployeeHome extends StatelessWidget {
                       ],
                     ),
                     trailing: _buildStatusIcon(entry['status'] ?? 'processing'),
+                    onTap: () {
+                      // Optional: preview image from entry['image_url']
+                    },
                   ),
                 );
               },
@@ -106,18 +158,6 @@ class EmployeeHome extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
-            IconButton(
-              icon: Icon(Icons.delete_forever),
-              onPressed: () async {
-                var box = Hive.box('userBox');
-                await box.clear();
-                
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('All local entries cleared!')),
-                );
-              },
-            ),
-
             IconButton(
               icon: const Icon(Icons.history),
               onPressed: () {

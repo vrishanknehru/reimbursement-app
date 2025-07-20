@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:hive/hive.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'employee_home.dart';
 
 class UploadDetails extends StatefulWidget {
@@ -43,40 +43,85 @@ class _UploadDetailsState extends State<UploadDetails> {
   @override
   void initState() {
     super.initState();
+    final user = Supabase.instance.client.auth.currentUser;
+
+    if (user == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Please log in first")));
+        Navigator.pop(context);
+      });
+    }
+
     if (widget.scannedDate != null) _dateController.text = widget.scannedDate!;
-    if (widget.scannedInvoice != null) _invoiceController.text = widget.scannedInvoice!;
-    if (widget.scannedAmount != null) _amountController.text = widget.scannedAmount!;
+    if (widget.scannedInvoice != null)
+      _invoiceController.text = widget.scannedInvoice!;
+    if (widget.scannedAmount != null)
+      _amountController.text = widget.scannedAmount!;
   }
 
-  void _submitData() async {
+  Future<void> _submitData() async {
+    final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
+
+    if (user == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("User not logged in")));
+      return;
+    }
+
     if (_selectedPurpose == null ||
         _selectedSource == null ||
         _dateController.text.isEmpty ||
         _invoiceController.text.isEmpty ||
         _amountController.text.isEmpty ||
-        _descriptionController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please fill all fields")));
+        _descriptionController.text.isEmpty ||
+        widget.imageFile == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Please fill all fields")));
       return;
     }
 
-    var box = Hive.box('userBox');
+    try {
+      final fileName = 'bill_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final storagePath = 'bills/$fileName';
 
-    var entry = {
-      'purpose': _selectedPurpose,
-      'source': _selectedSource,
-      'date': _dateController.text,
-      'invoiceNumber': _invoiceController.text,
-      'amount': _amountController.text,
-      'description': _descriptionController.text,
-      'status': 'processing',
-      'imagePath': widget.imageFile?.path,
-    };
+      await supabase.storage
+          .from('bills')
+          .upload(storagePath, widget.imageFile!);
 
-    List existing = box.get('entries', defaultValue: []);
-    existing.add(entry);
-    await box.put('entries', existing);
+      final publicUrl = supabase.storage
+          .from('bills')
+          .getPublicUrl(storagePath);
 
-    Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const EmployeeHome()));
+      await supabase.from('bills').insert({
+        'user_id': user.id,
+        'purpose': _selectedPurpose,
+        'source': _selectedSource,
+        'date': _dateController.text,
+        'invoice': _invoiceController.text,
+        'amount': _amountController.text,
+        'description': _descriptionController.text,
+        'image_url': publicUrl,
+        'status': 'processing',
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Bill submitted successfully!")),
+      );
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const EmployeeHome()),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Upload failed: $e")));
+    }
   }
 
   @override
@@ -128,21 +173,20 @@ class _UploadDetailsState extends State<UploadDetails> {
                 readOnly: true,
                 decoration: const InputDecoration(
                   labelText: "Date",
-                  hintText: "Select date",
                   border: OutlineInputBorder(),
                   suffixIcon: Icon(Icons.calendar_today),
                 ),
                 onTap: () async {
-                  DateTime? pickedDate = await showDatePicker(
+                  DateTime? picked = await showDatePicker(
                     context: context,
                     initialDate: DateTime.now(),
                     firstDate: DateTime(2000),
                     lastDate: DateTime(2100),
                   );
-                  if (pickedDate != null) {
-                    setState(() {
-                      _dateController.text = DateFormat('yyyy-MM-dd').format(pickedDate);
-                    });
+                  if (picked != null) {
+                    _dateController.text = DateFormat(
+                      'yyyy-MM-dd',
+                    ).format(picked);
                   }
                 },
               ),
@@ -179,25 +223,20 @@ class _UploadDetailsState extends State<UploadDetails> {
               const SizedBox(height: 24),
 
               if (widget.imageFile != null)
-                GestureDetector(
-                  onTap: () {
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => Scaffold(
-                        appBar: AppBar(title: const Text("Attached Image")),
-                        body: Center(child: Image.file(widget.imageFile!)),
-                      ),
-                    ));
-                  },
-                  child: Container(
-                    height: 120,
-                    width: 120,
-                    decoration: BoxDecoration(border: Border.all(color: Colors.grey)),
-                    child: Image.file(widget.imageFile!, fit: BoxFit.cover),
+                Container(
+                  height: 120,
+                  width: 120,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
                   ),
+                  child: Image.file(widget.imageFile!, fit: BoxFit.cover),
                 ),
 
               const SizedBox(height: 20),
-              ElevatedButton(onPressed: _submitData, child: const Text("Submit")),
+              ElevatedButton(
+                onPressed: _submitData,
+                child: const Text("Submit"),
+              ),
             ],
           ),
         ),
