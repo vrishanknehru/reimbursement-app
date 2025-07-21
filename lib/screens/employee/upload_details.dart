@@ -3,13 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'employee_home.dart';
+import 'package:flutter_application_1/screens/employee/employee_home.dart';
 
 class UploadDetails extends StatefulWidget {
   final String? scannedAmount;
   final String? scannedInvoice;
   final String? scannedDate;
   final File? imageFile;
+  final String userEmail;
 
   const UploadDetails({
     super.key,
@@ -17,6 +18,7 @@ class UploadDetails extends StatefulWidget {
     this.scannedInvoice,
     this.scannedDate,
     this.imageFile,
+    required this.userEmail,
   });
 
   @override
@@ -31,6 +33,7 @@ class _UploadDetailsState extends State<UploadDetails> {
 
   String? _selectedPurpose;
   String? _selectedSource;
+  bool _isSubmitting = false;
 
   final List<String> purposeOptions = [
     "Travel & Logistics",
@@ -43,86 +46,134 @@ class _UploadDetailsState extends State<UploadDetails> {
   @override
   void initState() {
     super.initState();
-    final user = Supabase.instance.client.auth.currentUser;
-
-    if (user == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Please log in first")));
-        Navigator.pop(context);
-      });
-    }
 
     if (widget.scannedDate != null) _dateController.text = widget.scannedDate!;
-    if (widget.scannedInvoice != null)
+    if (widget.scannedInvoice != null) {
       _invoiceController.text = widget.scannedInvoice!;
-    if (widget.scannedAmount != null)
-      _amountController.text = widget.scannedAmount!;
+    }
+    if (widget.scannedAmount != null) {
+      final cleanAmount = widget.scannedAmount!.replaceAll(
+        RegExp(r'[^\d.]'),
+        '',
+      );
+      _amountController.text = cleanAmount;
+    }
   }
 
   Future<void> _submitData() async {
+    if (_isSubmitting) return;
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
     final supabase = Supabase.instance.client;
-    final user = supabase.auth.currentUser;
-
-    if (user == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("User not logged in")));
-      return;
-    }
-
-    if (_selectedPurpose == null ||
-        _selectedSource == null ||
-        _dateController.text.isEmpty ||
-        _invoiceController.text.isEmpty ||
-        _amountController.text.isEmpty ||
-        _descriptionController.text.isEmpty ||
-        widget.imageFile == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Please fill all fields")));
-      return;
-    }
+    String? userId;
+    String? publicUrl;
 
     try {
-      final fileName = 'bill_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final storagePath = 'bills/$fileName';
+      final userResponse = await supabase
+          .from('users')
+          .select('id')
+          .eq('email', widget.userEmail)
+          .maybeSingle();
 
-      await supabase.storage
-          .from('bills')
-          .upload(storagePath, widget.imageFile!);
+      if (userResponse == null || userResponse['id'] == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("User ID not found for this email. Cannot submit."),
+            ),
+          );
+        }
+        return;
+      }
+      userId = userResponse['id'] as String;
 
-      final publicUrl = supabase.storage
-          .from('bills')
-          .getPublicUrl(storagePath);
+      if (_selectedPurpose == null ||
+          _selectedSource == null ||
+          _dateController.text.isEmpty ||
+          _invoiceController.text.isEmpty ||
+          _amountController.text.isEmpty ||
+          _descriptionController.text.isEmpty ||
+          widget.imageFile == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Please fill all fields and attach an image."),
+            ),
+          );
+        }
+        return;
+      }
 
-      await supabase.from('bills').insert({
-        'user_id': user.id,
+      double? amount;
+      try {
+        amount = double.parse(_amountController.text);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Please enter a valid amount.")),
+          );
+        }
+        return;
+      }
+
+      final uploadedFileName = await supabase.storage
+          .from('receipts')
+          .upload(
+            'bills/${userId}/${DateTime.now().millisecondsSinceEpoch}.jpg',
+            widget.imageFile!,
+          );
+
+      publicUrl = supabase.storage
+          .from('receipts')
+          .getPublicUrl(
+            'bills/${userId}/${DateTime.now().millisecondsSinceEpoch}.jpg',
+          );
+
+      final dbResponse = await supabase.from('bills').insert({
+        'user_id': userId,
         'purpose': _selectedPurpose,
         'source': _selectedSource,
         'date': _dateController.text,
-        'invoice': _invoiceController.text,
-        'amount': _amountController.text,
+        'invoice_no': _invoiceController.text,
+        'amount': amount,
         'description': _descriptionController.text,
         'image_url': publicUrl,
-        'status': 'processing',
+        'status': 'pending',
+        'created_at': DateTime.now().toIso8601String(),
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Bill submitted successfully!")),
-      );
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => EmployeeHome(email: user.email ?? ''),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Bill submitted successfully!")),
+        );
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => EmployeeHome(email: widget.userEmail),
+          ),
+        );
+      }
+    } on PostgrestException catch (e) {
+      print('Upload failed: PostgrestException during DB insert: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Database error: ${e.message}")));
+      }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Upload failed: $e")));
+      print('Upload failed: Unexpected error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Upload failed: ${e.toString()}")),
+        );
+      }
+    } finally {
+      setState(() {
+        _isSubmitting = false;
+      });
     }
   }
 
@@ -174,7 +225,7 @@ class _UploadDetailsState extends State<UploadDetails> {
                 controller: _dateController,
                 readOnly: true,
                 decoration: const InputDecoration(
-                  labelText: "Date",
+                  labelText: "Date (YYYY-MM-DD)",
                   border: OutlineInputBorder(),
                   suffixIcon: Icon(Icons.calendar_today),
                 ),
@@ -185,10 +236,12 @@ class _UploadDetailsState extends State<UploadDetails> {
                     firstDate: DateTime(2000),
                     lastDate: DateTime(2100),
                   );
-                  _dateController.text = DateFormat(
-                    'yyyy-MM-dd',
-                  ).format(picked!);
-                                },
+                  if (picked != null) {
+                    _dateController.text = DateFormat(
+                      'yyyy-MM-dd',
+                    ).format(picked);
+                  }
+                },
               ),
               const SizedBox(height: 16),
 
@@ -203,8 +256,12 @@ class _UploadDetailsState extends State<UploadDetails> {
 
               TextFormField(
                 controller: _amountController,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                ],
                 decoration: const InputDecoration(
                   labelText: "Amount",
                   border: OutlineInputBorder(),
@@ -222,25 +279,75 @@ class _UploadDetailsState extends State<UploadDetails> {
               ),
               const SizedBox(height: 24),
 
+              // Image preview at the bottom of the form
               if (widget.imageFile != null)
                 Container(
-                  height: 120,
-                  width: 120,
+                  height: 200,
+                  width: double.infinity,
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.grey),
                   ),
-                  child: Image.file(widget.imageFile!, fit: BoxFit.cover),
+                  child: _buildFilePreview(
+                    widget.imageFile!,
+                  ), // This helper handles basic image/PDF
                 ),
+              const SizedBox(height: 24),
 
-              const SizedBox(height: 20),
               ElevatedButton(
-                onPressed: _submitData,
-                child: const Text("Submit"),
+                onPressed: _isSubmitting ? null : _submitData,
+                child: _isSubmitting
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text("Submit"),
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  // Helper to build file preview (handles basic image/PDF icon)
+  Widget _buildFilePreview(File file) {
+    String fileExtension = file.path.split('.').last.toLowerCase();
+
+    if (fileExtension == 'pdf') {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.picture_as_pdf, size: 80, color: Colors.redAccent),
+          const SizedBox(height: 8),
+          Text(
+            '${file.path.split('/').last}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 14, color: Colors.black54),
+          ),
+          const Text(
+            '(PDF Preview Not Available)', // Will show this for PDFs
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+        ],
+      );
+    } else if (fileExtension == 'jpg' ||
+        fileExtension == 'jpeg' ||
+        fileExtension == 'png') {
+      return Image.file(file, fit: BoxFit.contain);
+    } else {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.insert_drive_file, size: 80, color: Colors.grey),
+          const SizedBox(height: 8),
+          Text(
+            '${file.path.split('/').last}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 14, color: Colors.black54),
+          ),
+          const Text(
+            '(Unsupported File Type)',
+            style: TextStyle(fontSize: 12, color: Colors.red),
+          ),
+        ],
+      );
+    }
   }
 }

@@ -28,12 +28,11 @@ class _LoginScreenState extends State<LoginScreen> {
     final supabase = Supabase.instance.client;
 
     try {
-      // Direct query to your 'users' table for authentication
       final response = await supabase
-          .from('users') // Changed from 'profiles' back to 'users'
+          .from('users')
           .select()
           .eq('email', email)
-          .eq('password', password) // Comparing plain text password
+          .eq('password', password)
           .maybeSingle();
 
       if (response == null) {
@@ -53,7 +52,6 @@ class _LoginScreenState extends State<LoginScreen> {
       } else if (role == 'employee') {
         Navigator.pushReplacement(
           context,
-          // Passing email as before
           MaterialPageRoute(builder: (context) => EmployeeHome(email: email)),
         );
       } else {

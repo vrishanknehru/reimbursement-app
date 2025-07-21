@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/screens/employee/take_img.dart';
-import 'package:flutter_application_1/screens/employee/history_page.dart'; // Ensure this exists if you use it
-import 'package:flutter_application_1/screens/login_page.dart';
+import 'package:flutter_application_1/screens/employee/history_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_application_1/screens/login_page.dart';
+// REMOVED: import 'package:flutter_application_1/screens/employee/bill_viewer_page.dart';
 
 class EmployeeHome extends StatefulWidget {
-  final String email; // Back to using email
+  final String email;
+
   const EmployeeHome({super.key, required this.email});
 
   @override
@@ -16,66 +18,98 @@ class _EmployeeHomeState extends State<EmployeeHome> {
   final supabase = Supabase.instance.client;
   List<Map<String, dynamic>> userBills = [];
   bool isLoading = true;
-  String? errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _fetchBills();
-    // Note: Realtime might not work as intended without RLS or specific channel setup
-    // for this custom authentication approach.
+    _checkRoleAndFetchBills();
   }
 
-  Future<void> _fetchBills() async {
+  Future<void> _checkRoleAndFetchBills() async {
     setState(() {
       isLoading = true;
-      errorMessage = null; // Clear previous errors
     });
+
     try {
-      // First, get the user's ID from your 'users' table using their email
       final userResponse = await supabase
-          .from('users') // Querying your custom 'users' table
-          .select('id')
+          .from('users')
+          .select('id, role')
           .eq('email', widget.email)
           .maybeSingle();
 
-      if (userResponse == null || userResponse['id'] == null) {
-        setState(() {
-          errorMessage = "User ID not found for this email.";
-          isLoading = false;
-        });
+      if (userResponse == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("User not found. Please log in again."),
+            ),
+          );
+          _navigateToLogin();
+        }
         return;
       }
 
-      final userId = userResponse['id'];
+      final userId = userResponse['id'] as String;
+      final role = userResponse['role']?.toString().toLowerCase();
 
-      // Then, fetch bills using that custom user ID
-      final bills = await supabase
+      if (role != 'employee') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                "Access Denied: Your role is '$role', not an employee.",
+              ),
+            ),
+          );
+          _navigateToLogin();
+        }
+        return;
+      }
+
+      // Ensure 'image_url' is selected (even if not used for direct viewing on this page, it's in DB)
+      final billsResponse = await supabase
           .from('bills')
-          .select()
-          .eq('user_id', userId) // Assuming 'bills' table still has a 'user_id'
+          .select(
+            'purpose, source, amount, date, invoice_no, description, status, created_at, image_url',
+          )
+          .eq('user_id', userId)
           .order('created_at', ascending: false)
           .limit(5);
 
       setState(() {
-        userBills = List<Map<String, dynamic>>.from(bills);
+        userBills = List<Map<String, dynamic>>.from(billsResponse);
         isLoading = false;
       });
     } catch (e) {
+      print("Error in EmployeeHome: $e");
       setState(() {
-        errorMessage = 'Failed to fetch bills: ${e.toString()}';
         isLoading = false;
       });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to load data: ${e.toString()}")),
+        );
+      }
     }
   }
 
-  Widget _buildStatusIcon(String? status) {
-    switch (status?.toLowerCase()) {
+  void _navigateToLogin() {
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (Route<dynamic> route) => false,
+      );
+    }
+  }
+
+  Widget _buildStatusIcon(String status) {
+    switch (status.toLowerCase()) {
       case 'approved':
         return const Icon(Icons.check_circle, color: Colors.green);
       case 'rejected':
         return const Icon(Icons.cancel, color: Colors.red);
-      default: // For 'pending' or any other status
+      default:
         return const Icon(Icons.hourglass_top, color: Colors.orange);
     }
   }
@@ -84,39 +118,43 @@ class _EmployeeHomeState extends State<EmployeeHome> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Employee Home"),
+        title: Row(
+          children: [
+            const Text("Home"),
+            const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _checkRoleAndFetchBills,
+              tooltip: 'Refresh',
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () {
-              // No Supabase Auth signOut here, just navigate back
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
-                (Route<dynamic> route) => false, // Remove all previous routes
-              );
-            },
+            onPressed: _navigateToLogin,
+            tooltip: 'Logout',
           ),
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchBills),
         ],
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          : errorMessage != null
-          ? Center(
-              child: Text(
-                errorMessage!,
-                style: const TextStyle(color: Colors.red),
-              ),
-            )
           : userBills.isEmpty
-          ? const Center(
+          ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text("No bills found. Start by adding one!"),
+                children: const [
+                  Icon(Icons.description, size: 80, color: Colors.grey),
                   SizedBox(height: 20),
-                  Icon(Icons.add_circle_outline, size: 50, color: Colors.grey),
+                  Text(
+                    "No bill uploaded yet",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 10),
+                  Text(
+                    "Status: N/A",
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
                 ],
               ),
             )
@@ -126,43 +164,89 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                 final entry = userBills[index];
                 return Card(
                   margin: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
+                    horizontal: 12,
+                    vertical: 6,
                   ),
-                  elevation: 2,
                   child: ListTile(
-                    leading: _buildStatusIcon(entry['status']),
+                    dense: true,
                     title: Text(
-                      entry['purpose'] != null && entry['source'] != null
-                          ? "${entry['purpose']} - ${entry['source']}"
-                          : "Reimbursement Request",
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      "${entry['purpose'] ?? 'N/A'} - ${entry['source'] ?? 'N/A'}",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
                     ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text("Amount: ${entry['amount'] ?? 'N/A'}"),
-                        Text("Date: ${entry['date'] ?? 'N/A'}"),
-                        Text("Status: ${entry['status'] ?? 'N/A'}"),
+                        Text(
+                          "Date: ${entry['date'] ?? 'N/A'}",
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        Text(
+                          "Invoice: ${entry['invoice_no'] ?? 'N/A'}",
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        Text(
+                          "Amount: \$${(entry['amount'] as num?)?.toStringAsFixed(2) ?? 'N/A'}",
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        Text(
+                          "Desc: ${entry['description'] ?? 'N/A'}",
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ],
                     ),
+                    trailing: _buildStatusIcon(
+                      entry['status']?.toString() ?? 'processing',
+                    ),
                     onTap: () {
-                      // TODO: Navigate to a detailed bill view page
+                      // This was the state before BillViewerPage: simple SnackBar
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            "Tapped on bill. Bill viewer not implemented.",
+                          ),
+                        ),
+                      );
                     },
                   ),
                 );
               },
             ),
+      bottomNavigationBar: BottomAppBar(
+        shape: const CircularNotchedRectangle(),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.history),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => HistoryPage(email: widget.email),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           await Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const TakeImagePage()),
+            MaterialPageRoute(
+              builder: (context) => TakeImagePage(userEmail: widget.email),
+            ),
           );
-          _fetchBills(); // Refresh after potentially adding a new bill
+          _checkRoleAndFetchBills();
         },
         child: const Icon(Icons.add),
+        tooltip: 'Add New Bill',
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endDocked,
     );
   }
 }

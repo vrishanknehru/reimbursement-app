@@ -6,11 +6,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 🐝 Initialize Hive
   await Hive.initFlutter();
   await Hive.openBox('userBox');
 
-  // 🧬 Initialize Supabase
   await Supabase.initialize(
     url: 'https://ahhtejzpkdfkneawvtuy.supabase.co',
     anonKey:
