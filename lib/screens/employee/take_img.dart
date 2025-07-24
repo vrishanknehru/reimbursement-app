@@ -1,18 +1,21 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/screens/employee/upload_details.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_ml_kit/google_ml_kit.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-// REMOVED: pdf_render and path_provider imports
-import 'upload_details.dart';
 
 class TakeImagePage extends StatefulWidget {
   final String userId; // Passed from EmployeeHome
   final String userEmail; // Passed from EmployeeHome
 
-  const TakeImagePage({super.key, required this.userId, required this.userEmail});
+  const TakeImagePage({
+    super.key,
+    required this.userId,
+    required this.userEmail,
+  });
 
   @override
   State<TakeImagePage> createState() => _TakeImagePageState();
@@ -69,9 +72,9 @@ class _TakeImagePageState extends State<TakeImagePage> {
 
       if (selectedFile == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No file selected.')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('No file selected.')));
         }
         return;
       }
@@ -80,7 +83,8 @@ class _TakeImagePageState extends State<TakeImagePage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text('Selected file does not exist on device.')),
+              content: Text('Selected file does not exist on device.'),
+            ),
           );
         }
         return;
@@ -97,8 +101,9 @@ class _TakeImagePageState extends State<TakeImagePage> {
         print('DEBUG: Performing OCR on image file: ${selectedFile.path}');
         final inputImage = InputImage.fromFile(selectedFile);
         final textRecognizer = GoogleMlKit.vision.textRecognizer();
-        final RecognizedText recognizedText =
-            await textRecognizer.processImage(inputImage);
+        final RecognizedText recognizedText = await textRecognizer.processImage(
+          inputImage,
+        );
         await textRecognizer.close();
 
         String rawText = recognizedText.text;
@@ -106,8 +111,9 @@ class _TakeImagePageState extends State<TakeImagePage> {
 
         // Date: Robust parsing for MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD
         RegExp datePattern = RegExp(
-          r'\b(\d{4}[/-]\d{1,2}[/-]\d{1,2})|' r'\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})|' + // MM/DD/YY, DD-MM-YYYY, etc.
-              r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},\s+\d{4}\b', // Month DD, YYYY
+          r'\b(\d{4}[/-]\d{1,2}[/-]\d{1,2})|'
+          r'\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})|'
+          r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},\s+\d{4}\b', // Month DD, YYYY
           caseSensitive: false,
         );
         Match? dateMatch = datePattern.firstMatch(rawText);
@@ -145,8 +151,8 @@ class _TakeImagePageState extends State<TakeImagePage> {
         );
         // Pattern to identify sequences that look like phone numbers within the text
         RegExp phoneLikePattern = RegExp(
-            r'\b(?:\+\d{1,3}[\s-]*)?(?:\d{2,4}[-\s]?){2,}\d{2,4}\b', // e.g., +1 234-567-8900, 215 658 98 75
-            caseSensitive: false
+          r'\b(?:\+\d{1,3}[\s-]*)?(?:\d{2,4}[-\s]?){2,}\d{2,4}\b', // e.g., +1 234-567-8900, 215 658 98 75
+          caseSensitive: false,
         );
 
         List<double> foundAmounts = [];
@@ -155,10 +161,10 @@ class _TakeImagePageState extends State<TakeImagePage> {
           String? value = match.group(1);
           if (value != null) {
             String contextAroundMatch = rawText.substring(
-                (match.start - 15).clamp(0, rawText.length),
-                (match.end + 15).clamp(0, rawText.length)
+              (match.start - 15).clamp(0, rawText.length),
+              (match.end + 15).clamp(0, rawText.length),
             );
-            
+
             if (!phoneLikePattern.hasMatch(contextAroundMatch)) {
               value = value.replaceAll(',', '.').trim();
               double? parsedValue = double.tryParse(value);
@@ -166,7 +172,9 @@ class _TakeImagePageState extends State<TakeImagePage> {
                 foundAmounts.add(parsedValue);
               }
             } else {
-                print('DEBUG: Excluded potential phone number component from amount: ${match.group(0)} (Context: "$contextAroundMatch")');
+              print(
+                'DEBUG: Excluded potential phone number component from amount: ${match.group(0)} (Context: "$contextAroundMatch")',
+              );
             }
           }
         }
@@ -180,13 +188,15 @@ class _TakeImagePageState extends State<TakeImagePage> {
           scannedAmount = null;
           print('DEBUG: No valid amounts found by OCR.');
         }
-
       } else if (fileExtension == 'pdf') {
-        print('DEBUG: PDF selected. Client-side OCR will be skipped. User will fill details manually.');
+        print(
+          'DEBUG: PDF selected. Client-side OCR will be skipped. User will fill details manually.',
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text('PDF selected. Please fill details manually.')),
+              content: Text('PDF selected. Please fill details manually.'),
+            ),
           );
         }
       } else {

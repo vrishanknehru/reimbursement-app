@@ -55,12 +55,14 @@ class _EmployeeHomeState extends State<EmployeeHome> {
         return;
       }
 
+      final userId = userResponse['id'] as String;
+
       final billsResponse = await supabase
           .from('bills')
           .select(
-            'purpose, source, amount, date, invoice_no, description, status, created_at, image_url, admin_notes',
-          ) // NEW: Select admin_notes
-          .eq('user_id', widget.userId)
+            'purpose, source, amount, date, invoice_no, description, status, created_at, image_url',
+          )
+          .eq('user_id', userId)
           .order('created_at', ascending: false)
           .limit(5);
 
@@ -202,7 +204,7 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                           style: const TextStyle(fontSize: 11),
                         ),
                         Text(
-                          "Amount: \$${(entry['amount'] as num?)?.toStringAsFixed(2) ?? 'N/A'} | Invoice: ${entry['invoice_no'] ?? 'N/A'}",
+                          "Amount: ₹${(entry['amount'] as num?)?.toStringAsFixed(2) ?? 'N/A'} | Invoice: ${entry['invoice_no'] ?? 'N/A'}", // CHANGED: '$' to '₹'
                           style: const TextStyle(fontSize: 11),
                         ),
                       ],
@@ -216,11 +218,8 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => BillViewerPage(
-                              billData: entry,
-                              isAdmin:
-                                  false, // NEW: Pass isAdmin false for employee view
-                            ),
+                            builder: (context) =>
+                                BillViewerPage(billData: entry),
                           ),
                         );
                       } else {
@@ -268,8 +267,8 @@ class _EmployeeHomeState extends State<EmployeeHome> {
           );
           _checkUserAndFetchBills();
         },
-        child: const Icon(Icons.add),
         tooltip: 'Add New Bill',
+        child: const Icon(Icons.add),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endDocked,
     );

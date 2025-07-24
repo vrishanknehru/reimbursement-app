@@ -34,27 +34,11 @@ class _HistoryPageState extends State<HistoryPage> {
     try {
       final userId = widget.userId;
 
-      if (userId == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                "User not logged in or ID missing. Cannot load history.",
-              ),
-            ),
-          );
-        }
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-
       final billsResponse = await supabase
           .from('bills')
           .select(
             'purpose, source, amount, date, invoice_no, description, status, created_at, image_url, admin_notes',
-          ) // NEW: Select admin_notes
+          )
           .eq('user_id', userId)
           .order('created_at', ascending: false);
 
@@ -160,7 +144,7 @@ class _HistoryPageState extends State<HistoryPage> {
                           style: const TextStyle(fontSize: 11),
                         ),
                         Text(
-                          "Amount: \$${(entry['amount'] as num?)?.toStringAsFixed(2) ?? 'N/A'} | Invoice: ${entry['invoice_no'] ?? 'N/A'}",
+                          "Amount: ₹${(entry['amount'] as num?)?.toStringAsFixed(2) ?? 'N/A'} | Invoice: ${entry['invoice_no'] ?? 'N/A'}",
                           style: const TextStyle(fontSize: 11),
                         ),
                       ],
@@ -177,7 +161,7 @@ class _HistoryPageState extends State<HistoryPage> {
                             builder: (context) => BillViewerPage(
                               billData: entry,
                               isAdmin:
-                                  false, // NEW: Pass isAdmin false for employee view
+                                  false, // Pass isAdmin false for employee view
                             ),
                           ),
                         );

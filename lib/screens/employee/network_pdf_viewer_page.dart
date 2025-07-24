@@ -93,8 +93,8 @@ class _NetworkPdfViewerPageState extends State<NetworkPdfViewerPage> {
                         _error = 'Error rendering PDF: $error';
                       });
                     },
-                    onRender: (_pages) {
-                      print('DEBUG: PDF rendered $_pages pages in full screen');
+                    onRender: (pages) {
+                      print('DEBUG: PDF rendered $pages pages in full screen');
                     },
                   )
                 : Text(

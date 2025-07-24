@@ -10,12 +10,12 @@ import 'package:flutter_application_1/screens/employee/network_pdf_viewer_page.d
 
 class BillViewerPage extends StatefulWidget {
   final Map<String, dynamic> billData;
-  final bool isAdmin; // NEW: Flag to indicate if the viewer is admin
+  final bool isAdmin; // Passed from AdminDashboard or EmployeeHome/History
 
   const BillViewerPage({
     super.key,
     required this.billData,
-    this.isAdmin = false, // Default to false if not provided
+    this.isAdmin = false,
   });
 
   @override
@@ -37,7 +37,7 @@ class _BillViewerPageState extends State<BillViewerPage> {
   late String _description;
   late String _status;
   late String _claimedAtDateOnly;
-  late String _adminNotes; // NEW: To store admin remarks
+  late String _adminNotes; // Admin remarks
 
   @override
   void initState() {
@@ -51,8 +51,7 @@ class _BillViewerPageState extends State<BillViewerPage> {
     _description = widget.billData['description'] ?? 'N/A';
     _status = widget.billData['status']?.toString().toUpperCase() ?? 'UNKNOWN';
     _billUrl = widget.billData['image_url'] ?? '';
-    _adminNotes =
-        widget.billData['admin_notes'] ?? ''; // NEW: Extract admin_notes
+    _adminNotes = widget.billData['admin_notes'] ?? '';
 
     if (widget.billData['created_at'] != null) {
       try {
@@ -169,12 +168,14 @@ class _BillViewerPageState extends State<BillViewerPage> {
                     _buildDetailRow('Claim Sent At', _claimedAtDateOnly),
                     _buildDetailRow('Purpose', _purpose),
                     _buildDetailRow('Source', _source),
-                    _buildDetailRow('Amount', '\$${_amount}'),
+                    _buildDetailRow(
+                      'Amount',
+                      '₹$_amount',
+                    ), // CHANGED: '$' to '₹'
                     _buildDetailRow('Bill Date', _billDate),
                     _buildDetailRow('Invoice No.', _invoiceNo),
                     _buildDetailRow('Description', _description),
                     _buildDetailRow('Status', _status),
-                    // NEW: Display Admin Notes if available and applicable
                     if (_adminNotes.isNotEmpty &&
                         (_status == 'REJECTED' || widget.isAdmin))
                       _buildDetailRow('Admin Remarks', _adminNotes),
@@ -237,8 +238,8 @@ class _BillViewerPageState extends State<BillViewerPage> {
                                       _pdfError = 'Error rendering PDF: $error';
                                     });
                                   },
-                                  onRender: (_pages) {
-                                    print('DEBUG: PDF rendered $_pages pages');
+                                  onRender: (pages) {
+                                    print('DEBUG: PDF rendered $pages pages');
                                   },
                                   onViewCreated: (PDFViewController vc) {
                                     print('DEBUG: PDFView created');

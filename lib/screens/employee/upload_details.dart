@@ -6,8 +6,11 @@ import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_application_1/screens/employee/employee_home.dart';
-import 'package:flutter_pdfview/flutter_pdfview.dart'; 
-import 'package:path_provider/path_provider.dart'; 
+import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:path_provider/path_provider.dart';
+
+import 'package:pdf/pdf.dart'; // For PDF colors, fonts etc.
+import 'package:pdf/widgets.dart' as pw; // Use pw prefix for pdf widgets
 
 class UploadDetails extends StatefulWidget {
   final String? scannedAmount;
@@ -41,11 +44,36 @@ class _UploadDetailsState extends State<UploadDetails> {
   String? _selectedSource;
   bool _isSubmitting = false;
 
+  String _descriptionHintText = "Enter detailed description of the expense";
+
   final List<String> purposeOptions = [
-    "Travel & Logistics",
-    "Work Essentials",
-    "Client & Team Expenses",
+    "Team Dinner/Lunch",
+    "Team Member Birthday",
+    "Team Member Farewell",
+    "Team Education",
+    "Team Activity",
+    "Travel & Hotel Stay",
+    "Visa Application",
+    "Domestic Travel",
+    "International Roaming",
+    "Taxable Wellness Grant",
+    "Other",
   ];
+
+  final Map<String, String> purposeRemarksMap = {
+    "Team Dinner/Lunch": "Mention DM name / count of attendees / brief purpose",
+    "Team Member Birthday": "Mention birthday person's name / what was bought",
+    "Team Member Farewell":
+        "Mention farewell person's name / reason for leaving",
+    "Team Education": "Mention course/training name / key takeaways",
+    "Team Activity": "Mention activity details / participants",
+    "Travel & Hotel Stay": "Mention destination / dates / reason for travel",
+    "Visa Application": "Mention country / reason for visa",
+    "Domestic Travel": "Mention origin-destination / dates",
+    "International Roaming": "Mention country / duration of roaming",
+    "Taxable Wellness Grant": "Mention item/service purchased / benefit",
+    "Other": "Please specify details of the expense",
+  };
 
   final List<String> sourceOptions = ["Personal Card", "Company Card"];
 
@@ -164,7 +192,8 @@ class _UploadDetailsState extends State<UploadDetails> {
         'date': _dateController.text,
         'invoice_no': _invoiceController.text,
         'amount': amount,
-        'description': _descriptionController.text,
+        'description':
+            _descriptionController.text, // Use content from controller
         'image_url': publicUrl,
         'status': 'pending',
         'created_at': DateTime.now().toIso8601String(),
@@ -203,6 +232,93 @@ class _UploadDetailsState extends State<UploadDetails> {
     }
   }
 
+  // NEW: Function to generate and preview PDF from form details
+  Future<void> _generateAndPreviewPdf() async {
+    if (_selectedPurpose == null ||
+        _selectedSource == null ||
+        _dateController.text.isEmpty ||
+        _invoiceController.text.isEmpty ||
+        _amountController.text.isEmpty ||
+        _descriptionController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please fill all fields to generate PDF."),
+        ),
+      );
+      return;
+    }
+
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.Page(
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                'Reimbursement Claim Details',
+                style: pw.TextStyle(
+                  fontSize: 24,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              pw.Text(
+                'Purpose: ${_selectedPurpose}',
+                style: pw.TextStyle(fontSize: 16),
+              ),
+              pw.Text(
+                'Source: ${_selectedSource}',
+                style: pw.TextStyle(fontSize: 16),
+              ),
+              pw.Text(
+                'Date: ${_dateController.text}',
+                style: pw.TextStyle(fontSize: 16),
+              ),
+              pw.Text(
+                'Invoice No.: ${_invoiceController.text}',
+                style: pw.TextStyle(fontSize: 16),
+              ),
+              pw.Text(
+                'Amount: ₹${_amountController.text}',
+                style: pw.TextStyle(fontSize: 16),
+              ),
+              pw.Text(
+                'Description: ${_descriptionController.text}',
+                style: pw.TextStyle(fontSize: 16),
+              ),
+              pw.SizedBox(height: 20),
+              if (widget.imageFile !=
+                  null) // Optionally embed the original image in the PDF
+                pw.Image(
+                  pw.MemoryImage(widget.imageFile!.readAsBytesSync()),
+                  width: 200,
+                ),
+            ],
+          );
+        },
+      ),
+    );
+
+    // Save the PDF to a temporary file
+    final output = await getTemporaryDirectory();
+    final file = File(
+      '${output.path}/generated_bill_details_${DateTime.now().millisecondsSinceEpoch}.pdf',
+    );
+    await file.writeAsBytes(await pdf.save());
+
+    // Open the generated PDF in the viewer
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => LocalPdfViewerPage(pdfFile: file),
+        ),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _dateController.dispose();
@@ -230,7 +346,12 @@ class _UploadDetailsState extends State<UploadDetails> {
                 items: purposeOptions.map((purpose) {
                   return DropdownMenuItem(value: purpose, child: Text(purpose));
                 }).toList(),
-                onChanged: (value) => setState(() => _selectedPurpose = value),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedPurpose = value;
+                    _descriptionHintText = purposeRemarksMap[value] ?? '';
+                  });
+                },
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
@@ -293,9 +414,10 @@ class _UploadDetailsState extends State<UploadDetails> {
               TextFormField(
                 controller: _descriptionController,
                 maxLines: 3,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: "Description",
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
+                  hintText: _descriptionHintText,
                 ),
               ),
               const SizedBox(height: 24),
@@ -355,7 +477,7 @@ class _UploadDetailsState extends State<UploadDetails> {
                     border: Border.all(
                       color: Colors.grey,
                       style: BorderStyle.solid,
-                    ), // Changed from dashed to solid
+                    ),
                     color: Colors.grey[100],
                   ),
                   child: const Text(
@@ -364,6 +486,17 @@ class _UploadDetailsState extends State<UploadDetails> {
                   ),
                 ),
               const SizedBox(height: 24),
+
+              // NEW: Button to generate and preview PDF from form details
+              ElevatedButton.icon(
+                onPressed: _generateAndPreviewPdf,
+                icon: const Icon(Icons.picture_as_pdf),
+                label: const Text("Generate & Preview PDF"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueGrey,
+                ),
+              ),
+              const SizedBox(height: 16),
 
               ElevatedButton(
                 onPressed: _isSubmitting ? null : _submitData,
@@ -396,15 +529,14 @@ class _UploadDetailsState extends State<UploadDetails> {
 
     if (fileExtension == 'pdf') {
       return IgnorePointer(
-        // Ignore pointer events on PDFView so GestureDetector can catch taps
         ignoring: true,
         child: SizedBox(
-          height: 200, // Constrain height
+          height: 200,
           width: double.infinity,
           child: PDFView(
-            filePath: file.path, // Use the local file path directly
+            filePath: file.path,
             enableSwipe: true,
-            swipeHorizontal: false, // Vertical swipe for small preview
+            swipeHorizontal: false,
             autoSpacing: true,
             pageFling: true,
             pageSnap: true,

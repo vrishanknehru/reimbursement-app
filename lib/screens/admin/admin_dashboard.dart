@@ -20,7 +20,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   bool isLoading = true;
   String? errorMessage;
 
-  Map<String, String> userEmails = {};
+  Map<String, String> userNames = {};
 
   @override
   void initState() {
@@ -55,10 +55,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
         return;
       }
 
-      final usersData = await supabase.from('users').select('id, email');
-      userEmails = {
+      final usersData = await supabase.from('users').select('id, username');
+      userNames = {
         for (var user in usersData)
-          user['id'] as String: user['email'] as String,
+          user['id'] as String: user['username'] as String,
       };
 
       final billsResponse = await supabase
@@ -134,30 +134,25 @@ class _AdminDashboardState extends State<AdminDashboard> {
           .update({'status': newStatus, 'admin_notes': remarks})
           .eq('id', billId);
 
-      // --- FIX START: Handle dbResponse being null on success ---
       if (dbResponse == null) {
-        // If dbResponse is null but no exception was thrown, assume success
         print(
           'DEBUG: DB Update returned null response but no error was thrown. Assuming success.',
         );
       } else if (dbResponse.error != null) {
-        // If dbResponse is not null but contains an error
         print(
           'DEBUG: DB Update returned non-null response with error: ${dbResponse.error!.message}',
         );
-        throw dbResponse.error!; // Re-throw the explicit error
+        throw dbResponse.error!;
       } else {
-        // dbResponse is not null and has no error, explicit success
         print('DEBUG: DB Update returned successful response.');
       }
-      // --- FIX END ---
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Bill $newStatus successfully!')),
         );
       }
-      _checkAdminRoleAndFetchBills(); // Refresh list
+      _checkAdminRoleAndFetchBills();
     } catch (e) {
       print("Error updating bill status: $e");
       if (mounted) {
@@ -225,8 +220,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
               itemCount: allBills.length,
               itemBuilder: (context, index) {
                 final bill = allBills[index];
-                final String employeeEmail =
-                    userEmails[bill['user_id']] ?? 'Unknown User';
+                final String personUsername =
+                    userNames[bill['user_id']] ?? 'Unknown User';
 
                 String formattedClaimDate = 'N/A';
                 if (bill['created_at'] != null) {
@@ -261,14 +256,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                employeeEmail,
+                                personUsername, // Display Username
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
                                 ),
                               ),
                               Text(
-                                '\$${(bill['amount'] as num?)?.toStringAsFixed(2) ?? 'N/A'}',
+                                '₹${(bill['amount'] as num?)?.toStringAsFixed(2) ?? 'N/A'}', // CHANGED: '$' to '₹'
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
@@ -287,7 +282,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 ),
                               ),
                               Text(
-                                "Claimed: ${formattedClaimDate} | Source: ${bill['source'] ?? 'N/A'}",
+                                "Claimed: $formattedClaimDate | Source: ${bill['source'] ?? 'N/A'}",
                                 style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey,
@@ -306,8 +301,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 MaterialPageRoute(
                                   builder: (context) => BillViewerPage(
                                     billData: bill,
-                                    isAdmin:
-                                        true, // Pass isAdmin true for admin view
+                                    isAdmin: true,
                                   ),
                                 ),
                               );
@@ -362,9 +356,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                       'Status: ${bill['status']?.toUpperCase() ?? 'N/A'}',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
-                                        color: bill['status'] == 'approved'
+                                        color:
+                                            bill['status']?.toLowerCase() ==
+                                                'approved'
                                             ? Colors.green
-                                            : Colors.red,
+                                            : Colors.red, // Corrected typo here
                                       ),
                                     ),
                             ],
