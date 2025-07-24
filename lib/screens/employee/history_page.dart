@@ -7,7 +7,7 @@ class HistoryPage extends StatefulWidget {
   final String userId;
   final String email;
 
-  const HistoryPage({super.key, required this.userId, required this.email});
+  const HistoryPage({super.key, required this.userId, required this.email, String? username});
 
   @override
   State<HistoryPage> createState() => _HistoryPageState();

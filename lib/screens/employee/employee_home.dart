@@ -9,8 +9,14 @@ import 'package:intl/intl.dart';
 class EmployeeHome extends StatefulWidget {
   final String userId;
   final String email;
+  final String? username; // NEW: Receive username
 
-  const EmployeeHome({super.key, required this.userId, required this.email});
+  const EmployeeHome({
+    super.key,
+    required this.userId,
+    required this.email,
+    this.username, // NEW: Make username optional
+  });
 
   @override
   State<EmployeeHome> createState() => _EmployeeHomeState();
@@ -24,6 +30,10 @@ class _EmployeeHomeState extends State<EmployeeHome> {
   @override
   void initState() {
     super.initState();
+    print(
+      'EMPLOYEE_HOME_DEBUG: Initial userId received: "${widget.userId}" (length: ${widget.userId.length})',
+    );
+    print('EMPLOYEE_HOME_DEBUG: Username received: "${widget.username}"');
     _checkUserAndFetchBills();
   }
 
@@ -33,9 +43,22 @@ class _EmployeeHomeState extends State<EmployeeHome> {
     });
 
     try {
+      if (widget.userId.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Invalid user ID received. Please log in again."),
+            ),
+          );
+          _navigateToLogin();
+        }
+        return;
+      }
+
+      // Fetch username and role for current user from 'users' table
       final userResponse = await supabase
           .from('users')
-          .select('id, role')
+          .select('id, role, username') // Select username
           .eq('id', widget.userId)
           .eq('email', widget.email)
           .maybeSingle();
@@ -56,6 +79,7 @@ class _EmployeeHomeState extends State<EmployeeHome> {
       }
 
       final userId = userResponse['id'] as String;
+      // You could update widget.username here if needed, but it's passed in constructor.
 
       final billsResponse = await supabase
           .from('bills')
@@ -153,20 +177,40 @@ class _EmployeeHomeState extends State<EmployeeHome> {
               itemBuilder: (context, index) {
                 final entry = userBills[index];
 
-                String formattedDate = 'N/A';
+                // Format Bill Date for title
+                String formattedBillDate = 'N/A';
+                if (entry['date'] != null) {
+                  // Use 'date' for billing date
+                  try {
+                    final DateTime parsedBillDate = DateTime.parse(
+                      entry['date'],
+                    );
+                    formattedBillDate = DateFormat(
+                      'MMM dd, yyyy',
+                    ).format(parsedBillDate);
+                  } catch (e) {
+                    print("Error parsing bill date for display: $e");
+                    formattedBillDate = entry['date'].toString().split(
+                      'T',
+                    )[0]; // Fallback
+                  }
+                }
+
+                // Format Claimed Date for subtitle
+                String formattedClaimDate = 'N/A';
                 if (entry['created_at'] != null) {
                   try {
                     final DateTime parsedCreatedAt = DateTime.parse(
                       entry['created_at'],
                     );
-                    formattedDate = DateFormat(
+                    formattedClaimDate = DateFormat(
                       'MMM dd, yyyy',
                     ).format(parsedCreatedAt);
                   } catch (e) {
                     print("Error parsing created_at for display: $e");
-                    formattedDate = entry['created_at'].toString().split(
+                    formattedClaimDate = entry['created_at'].toString().split(
                       'T',
-                    )[0];
+                    )[0]; // Fallback
                   }
                 }
 
@@ -177,18 +221,20 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                   ),
                   child: ListTile(
                     dense: true,
+                    // --- NEW: Title and Subtitle Redesign (Matches Admin Dashboard) ---
                     title: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          formattedDate,
+                          formattedBillDate, // Bill Date in bold
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 15,
                           ),
                         ),
                         Text(
-                          entry['description'] ?? 'No Description',
+                          entry['description'] ??
+                              'No Description', // Description below date
                           style: const TextStyle(
                             fontSize: 13,
                             color: Colors.grey,
@@ -200,15 +246,16 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "${entry['purpose'] ?? 'N/A Purpose'} | ${entry['source'] ?? 'N/A Source'}",
+                          "Claimed: ${formattedClaimDate} | Purpose: ${entry['purpose'] ?? 'N/A'} | Source: ${entry['source'] ?? 'N/A'}",
                           style: const TextStyle(fontSize: 11),
                         ),
                         Text(
-                          "Amount: ₹${(entry['amount'] as num?)?.toStringAsFixed(2) ?? 'N/A'} | Invoice: ${entry['invoice_no'] ?? 'N/A'}", // CHANGED: '$' to '₹'
+                          "Amount: ₹${(entry['amount'] as num?)?.toStringAsFixed(2) ?? 'N/A'} | Invoice: ${entry['invoice_no'] ?? 'N/A'}",
                           style: const TextStyle(fontSize: 11),
                         ),
                       ],
                     ),
+                    // --- END NEW ---
                     trailing: _buildStatusIcon(
                       entry['status']?.toString() ?? 'processing',
                     ),
@@ -247,9 +294,12 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) =>
-                        HistoryPage(userId: widget.userId, email: widget.email),
-                  ),
+                    builder: (context) => HistoryPage(
+                      userId: widget.userId,
+                      email: widget.email,
+                      username: widget.username,
+                    ),
+                  ), // Pass username
                 );
               },
             ),
@@ -267,8 +317,8 @@ class _EmployeeHomeState extends State<EmployeeHome> {
           );
           _checkUserAndFetchBills();
         },
-        tooltip: 'Add New Bill',
         child: const Icon(Icons.add),
+        tooltip: 'Add New Bill',
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endDocked,
     );

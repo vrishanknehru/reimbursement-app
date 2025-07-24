@@ -29,9 +29,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final password = passwordController.text.trim();
 
     try {
+      // Select 'username' in addition to 'id' and 'role'
       final response = await supabase
           .from('users')
-          .select('id, role')
+          .select('id, role, username') // NEW: Select username
           .eq('email', email)
           .eq('password', password)
           .maybeSingle();
@@ -43,15 +44,15 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      final userId = response['id']; // userId is dynamic type here
+      final userId = response['id'];
       final role = response['role']?.toString().toLowerCase();
+      final username =
+          response['username'] as String?; // Get username, can be null
 
-      // --- DEBUGGING PRINTS ---
       print(
         'LOGIN_DEBUG: Raw user ID from DB: $userId (Type: ${userId.runtimeType})',
       );
-      if (userId == null || userId is! String || (userId).isEmpty) {
-        // Check if null, not string, OR empty string
+      if (userId == null || !(userId is String) || (userId as String).isEmpty) {
         setState(() {
           errorMessage =
               'User ID is missing, invalid, or empty from database. Please check DB.';
@@ -59,13 +60,18 @@ class _LoginScreenState extends State<LoginScreen> {
         print('LOGIN_DEBUG: User ID from DB is null or not String, or empty.');
         return;
       }
-      final String finalUserId = userId; // Safely cast after check
+      final String finalUserId = userId as String;
       print(
         'LOGIN_DEBUG: Final userId to pass from Login: "$finalUserId" (length: ${finalUserId.length})',
       );
-      // --- END DEBUGGING PRINTS ---
+      print('LOGIN_DEBUG: Username to pass: "$username"'); // Debug username
 
-      _handleNavigation(role, finalUserId, email);
+      _handleNavigation(
+        role,
+        finalUserId,
+        email,
+        username,
+      ); // NEW: Pass username
     } catch (e) {
       setState(() {
         errorMessage = 'Login failed. Please try again: ${e.toString()}';
@@ -78,20 +84,28 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _handleNavigation(String? role, String userId, String email) {
+  void _handleNavigation(
+    String? role,
+    String userId,
+    String email,
+    String? username,
+  ) {
+    // NEW: Add username param
     if (role == 'admin') {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => AdminDashboard(userId: userId, email: email),
-        ),
+          builder: (context) =>
+              AdminDashboard(userId: userId, email: email, username: username),
+        ), // NEW: Pass username
       );
     } else if (role == 'employee') {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => EmployeeHome(userId: userId, email: email),
-        ),
+          builder: (context) =>
+              EmployeeHome(userId: userId, email: email, username: username),
+        ), // NEW: Pass username
       );
     } else {
       setState(() {

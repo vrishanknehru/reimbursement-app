@@ -9,8 +9,8 @@ import 'package:flutter_application_1/screens/employee/employee_home.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'package:pdf/pdf.dart'; // For PDF colors, fonts etc.
-import 'package:pdf/widgets.dart' as pw; // Use pw prefix for pdf widgets
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 
 class UploadDetails extends StatefulWidget {
   final String? scannedAmount;
@@ -19,6 +19,7 @@ class UploadDetails extends StatefulWidget {
   final File? imageFile;
   final String userId;
   final String userEmail;
+  final String? username;
 
   const UploadDetails({
     super.key,
@@ -28,6 +29,7 @@ class UploadDetails extends StatefulWidget {
     this.imageFile,
     required this.userId,
     required this.userEmail,
+    this.username,
   });
 
   @override
@@ -103,6 +105,7 @@ class _UploadDetailsState extends State<UploadDetails> {
 
     final supabase = Supabase.instance.client;
     String? publicUrl;
+    String? generatedPdfPublicUrl;
 
     try {
       final userId = widget.userId;
@@ -185,6 +188,65 @@ class _UploadDetailsState extends State<UploadDetails> {
         throw Exception('File upload failed: ${e.toString()}');
       }
 
+      // 2. Generate and Upload Generated PDF
+      try {
+        print('DEBUG_UPLOAD: Generating PDF from form details...');
+        print(
+          'DEBUG_UPLOAD_PDF_GEN: Date Controller Text: ${_dateController.text}',
+        );
+
+        final generatedPdfBytes = await _generatePdfBytesFromDetails();
+        String generatedPdfFileName =
+            'generated_bill_${DateTime.now().millisecondsSinceEpoch}.pdf';
+        String generatedPdfStoragePath =
+            'generated_pdfs/${userId}/$generatedPdfFileName'; // Separate folder for generated PDFs
+
+        final uploadedGeneratedPdfResponse = await supabase.storage
+            .from('receipts')
+            .upload(
+              generatedPdfStoragePath,
+              generatedPdfBytes as File,
+              fileOptions: const FileOptions(contentType: 'application/pdf'),
+            ); // Explicitly set content type
+
+        if (uploadedGeneratedPdfResponse == null ||
+            uploadedGeneratedPdfResponse.isEmpty) {
+          throw Exception(
+            'Supabase Storage upload for generated PDF returned empty or null path.',
+          );
+        }
+
+        generatedPdfPublicUrl = supabase.storage
+            .from('receipts')
+            .getPublicUrl(generatedPdfStoragePath);
+        print('DEBUG_UPLOAD: Generated PDF Public URL: $generatedPdfPublicUrl');
+      } on StorageException catch (se) {
+        print(
+          'DEBUG_UPLOAD: StorageException caught during generated PDF upload: ${se.message} (Status: ${se.statusCode})',
+        );
+        generatedPdfPublicUrl = null; // Set to null if upload fails
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Warning: Failed to upload generated PDF: ${se.message}",
+            ),
+          ),
+        );
+      } catch (e) {
+        print(
+          'DEBUG_UPLOAD: Unexpected error during generated PDF creation/upload: $e',
+        );
+        generatedPdfPublicUrl = null;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Warning: Failed to create/upload generated PDF: ${e.toString()}",
+            ),
+          ),
+        );
+      }
+
+      // 3. Insert Bill Details into Database
       final dbResponse = await supabase.from('bills').insert({
         'user_id': userId,
         'purpose': _selectedPurpose,
@@ -192,9 +254,9 @@ class _UploadDetailsState extends State<UploadDetails> {
         'date': _dateController.text,
         'invoice_no': _invoiceController.text,
         'amount': amount,
-        'description':
-            _descriptionController.text, // Use content from controller
+        'description': _descriptionController.text,
         'image_url': publicUrl,
+        'generated_pdf_url': generatedPdfPublicUrl, // NEW: Generated PDF URL
         'status': 'pending',
         'created_at': DateTime.now().toIso8601String(),
       });
@@ -206,8 +268,11 @@ class _UploadDetailsState extends State<UploadDetails> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) =>
-                EmployeeHome(userId: userId, email: widget.userEmail),
+            builder: (_) => EmployeeHome(
+              userId: userId,
+              email: widget.userEmail,
+              username: widget.username,
+            ),
           ),
         );
       }
@@ -232,91 +297,124 @@ class _UploadDetailsState extends State<UploadDetails> {
     }
   }
 
-  // NEW: Function to generate and preview PDF from form details
-  Future<void> _generateAndPreviewPdf() async {
-    if (_selectedPurpose == null ||
-        _selectedSource == null ||
-        _dateController.text.isEmpty ||
-        _invoiceController.text.isEmpty ||
-        _amountController.text.isEmpty ||
-        _descriptionController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please fill all fields to generate PDF."),
-        ),
-      );
-      return;
-    }
-
+  // Helper function to generate PDF bytes from form data (structured as invoice)
+  Future<Uint8List> _generatePdfBytesFromDetails() async {
     final pdf = pw.Document();
+
+    String userNameForPdf = widget.username ?? widget.userEmail;
+    String claimedDateForPdf = DateFormat(
+      'MMM dd, yyyy',
+    ).format(DateTime.now());
 
     pdf.addPage(
       pw.Page(
+        pageFormat: PdfPageFormat.a4,
         build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text(
-                'Reimbursement Claim Details',
-                style: pw.TextStyle(
-                  fontSize: 24,
-                  fontWeight: pw.FontWeight.bold,
+          return pw.Padding(
+            padding: const pw.EdgeInsets.all(36),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Align(
+                  alignment: pw.Alignment.topRight,
+                  child: pw.Text(
+                    'INVOICE',
+                    style: pw.TextStyle(
+                      fontSize: 28,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.indigo,
+                    ),
+                  ),
                 ),
-              ),
-              pw.SizedBox(height: 20),
-              pw.Text(
-                'Purpose: ${_selectedPurpose}',
-                style: pw.TextStyle(fontSize: 16),
-              ),
-              pw.Text(
-                'Source: ${_selectedSource}',
-                style: pw.TextStyle(fontSize: 16),
-              ),
-              pw.Text(
-                'Date: ${_dateController.text}',
-                style: pw.TextStyle(fontSize: 16),
-              ),
-              pw.Text(
-                'Invoice No.: ${_invoiceController.text}',
-                style: pw.TextStyle(fontSize: 16),
-              ),
-              pw.Text(
-                'Amount: ₹${_amountController.text}',
-                style: pw.TextStyle(fontSize: 16),
-              ),
-              pw.Text(
-                'Description: ${_descriptionController.text}',
-                style: pw.TextStyle(fontSize: 16),
-              ),
-              pw.SizedBox(height: 20),
-              if (widget.imageFile !=
-                  null) // Optionally embed the original image in the PDF
-                pw.Image(
-                  pw.MemoryImage(widget.imageFile!.readAsBytesSync()),
-                  width: 200,
+                pw.SizedBox(height: 10),
+                pw.Text(
+                  'Employee Name: $userNameForPdf',
+                  style: pw.TextStyle(fontSize: 12),
                 ),
-            ],
+                pw.Text(
+                  'Employee Code: ${widget.userId.substring(0, 8)}',
+                  style: pw.TextStyle(fontSize: 12),
+                ),
+                pw.SizedBox(height: 30),
+
+                pw.Table.fromTextArray(
+                  headers: ['INVOICE No.', 'DATE'],
+                  data: [
+                    [_invoiceController.text, _dateController.text],
+                  ],
+                  border: pw.TableBorder.all(color: PdfColors.grey),
+                  headerStyle: pw.TextStyle(
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.white,
+                  ),
+                  headerDecoration: const pw.BoxDecoration(
+                    color: PdfColors.blueGrey800,
+                  ),
+                  cellAlignment: pw.Alignment.center,
+                  cellPadding: const pw.EdgeInsets.all(8),
+                  columnWidths: {
+                    0: const pw.FlexColumnWidth(1),
+                    1: const pw.FlexColumnWidth(1),
+                  },
+                ),
+                pw.SizedBox(height: 30),
+
+                pw.Table.fromTextArray(
+                  headers: ['DESCRIPTION', 'AMOUNT'],
+                  data: [
+                    [_descriptionController.text, '₹${_amountController.text}'],
+                  ],
+                  border: pw.TableBorder.all(color: PdfColors.grey),
+                  headerStyle: pw.TextStyle(
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.white,
+                  ),
+                  headerDecoration: const pw.BoxDecoration(
+                    color: PdfColors.blueGrey800,
+                  ),
+                  cellAlignment: pw.Alignment.centerLeft,
+                  cellPadding: const pw.EdgeInsets.all(8),
+                  columnWidths: {
+                    0: const pw.FlexColumnWidth(3),
+                    1: const pw.FlexColumnWidth(1),
+                  },
+                ),
+                pw.SizedBox(height: 20),
+
+                pw.Align(
+                  alignment: pw.Alignment.bottomRight,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Divider(color: PdfColors.grey),
+                      pw.SizedBox(height: 5),
+                      pw.Text(
+                        'TOTAL: ₹${_amountController.text}',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 30),
+
+                pw.Align(
+                  alignment: pw.Alignment.bottomCenter,
+                  child: pw.Text(
+                    'If you have any questions about this invoice, please contact [Your Company Contact Info]',
+                    style: pw.TextStyle(fontSize: 10, color: PdfColors.grey),
+                  ),
+                ),
+              ],
+            ),
           );
         },
       ),
     );
 
-    // Save the PDF to a temporary file
-    final output = await getTemporaryDirectory();
-    final file = File(
-      '${output.path}/generated_bill_details_${DateTime.now().millisecondsSinceEpoch}.pdf',
-    );
-    await file.writeAsBytes(await pdf.save());
-
-    // Open the generated PDF in the viewer
-    if (mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => LocalPdfViewerPage(pdfFile: file),
-        ),
-      );
-    }
+    return pdf.save();
   }
 
   @override
@@ -487,7 +585,7 @@ class _UploadDetailsState extends State<UploadDetails> {
                 ),
               const SizedBox(height: 24),
 
-              // NEW: Button to generate and preview PDF from form details
+              // Button to generate and preview PDF from form details
               ElevatedButton.icon(
                 onPressed: _generateAndPreviewPdf,
                 icon: const Icon(Icons.picture_as_pdf),
@@ -570,6 +668,29 @@ class _UploadDetailsState extends State<UploadDetails> {
           ),
         ],
       );
+    }
+  }
+
+  // Add this method to fix the undefined name error
+  Future<void> _generateAndPreviewPdf() async {
+    try {
+      final pdfBytes = await _generatePdfBytesFromDetails();
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File('${tempDir.path}/preview_invoice.pdf');
+      await tempFile.writeAsBytes(pdfBytes);
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => LocalPdfViewerPage(pdfFile: tempFile),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to generate/preview PDF: $e')),
+        );
+      }
     }
   }
 }

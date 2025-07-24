@@ -7,8 +7,14 @@ import 'package:intl/intl.dart';
 class AdminDashboard extends StatefulWidget {
   final String userId;
   final String email;
+  final String? username; // NEW: Receive username
 
-  const AdminDashboard({super.key, required this.userId, required this.email});
+  const AdminDashboard({
+    super.key,
+    required this.userId,
+    required this.email,
+    this.username,
+  });
 
   @override
   State<AdminDashboard> createState() => _AdminDashboardState();
@@ -20,7 +26,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   bool isLoading = true;
   String? errorMessage;
 
-  Map<String, String> userNames = {};
+  Map<String, String> userNames = {}; // Store user IDs mapped to usernames
 
   @override
   void initState() {
@@ -55,6 +61,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         return;
       }
 
+      // Fetch all users to get their usernames for display
       final usersData = await supabase.from('users').select('id, username');
       userNames = {
         for (var user in usersData)
@@ -106,7 +113,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             TextButton(
               child: const Text('Submit'),
               onPressed: () async {
-                Navigator.of(context).pop(); // Close dialog
+                Navigator.of(context).pop();
                 await _performStatusUpdate(
                   billId,
                   newStatus,
@@ -220,8 +227,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
               itemCount: allBills.length,
               itemBuilder: (context, index) {
                 final bill = allBills[index];
-                final String personUsername =
-                    userNames[bill['user_id']] ?? 'Unknown User';
+                final String employeeUsername =
+                    userNames[bill['user_id']] ??
+                    'Unknown User'; // Use username for display
+                final String employeeCode =
+                    bill['user_id']?.substring(0, 8) ??
+                    'N/A'; // Short code from UUID
 
                 String formattedClaimDate = 'N/A';
                 if (bill['created_at'] != null) {
@@ -256,14 +267,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                personUsername, // Display Username
+                                employeeUsername, // Display Username
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
                                 ),
                               ),
                               Text(
-                                '₹${(bill['amount'] as num?)?.toStringAsFixed(2) ?? 'N/A'}', // CHANGED: '$' to '₹'
+                                '₹${(bill['amount'] as num?)?.toStringAsFixed(2) ?? 'N/A'}', // Amount
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
@@ -282,7 +293,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 ),
                               ),
                               Text(
-                                "Claimed: $formattedClaimDate | Source: ${bill['source'] ?? 'N/A'}",
+                                "Claimed: ${formattedClaimDate} | Source: ${bill['source'] ?? 'N/A'}",
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                              Text(
+                                "Employee Code: $employeeCode", // Display short Employee Code
                                 style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey,
@@ -322,47 +340,42 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              bill['status'] == 'pending'
-                                  ? Row(
-                                      children: [
-                                        ElevatedButton.icon(
-                                          onPressed: () =>
-                                              _updateBillStatusWithRemarks(
-                                                bill['id'],
-                                                'approved',
-                                              ),
-                                          icon: const Icon(Icons.check),
-                                          label: const Text('Approve'),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.green[700],
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        ElevatedButton.icon(
-                                          onPressed: () =>
-                                              _updateBillStatusWithRemarks(
-                                                bill['id'],
-                                                'rejected',
-                                              ),
-                                          icon: const Icon(Icons.close),
-                                          label: const Text('Reject'),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.red[700],
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : Text(
-                                      'Status: ${bill['status']?.toUpperCase() ?? 'N/A'}',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color:
-                                            bill['status']?.toLowerCase() ==
-                                                'approved'
-                                            ? Colors.green
-                                            : Colors.red, // Corrected typo here
-                                      ),
-                                    ),
+                              if (bill['status'] == 'pending') ...[
+                                ElevatedButton.icon(
+                                  onPressed: () => _updateBillStatusWithRemarks(
+                                    bill['id'],
+                                    'approved',
+                                  ),
+                                  icon: const Icon(Icons.check),
+                                  label: const Text('Approve'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green[700],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton.icon(
+                                  onPressed: () => _updateBillStatusWithRemarks(
+                                    bill['id'],
+                                    'rejected',
+                                  ),
+                                  icon: const Icon(Icons.close),
+                                  label: const Text('Reject'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red[700],
+                                  ),
+                                ),
+                              ] else
+                                Text(
+                                  'Status: ${bill['status']?.toUpperCase() ?? 'N/A'}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color:
+                                        bill['status']?.toLowerCase() ==
+                                            'approved'
+                                        ? Colors.green
+                                        : Colors.red,
+                                  ),
+                                ),
                             ],
                           ),
                         ),
