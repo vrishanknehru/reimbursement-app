@@ -52,7 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
       print(
         'LOGIN_DEBUG: Raw user ID from DB: $userId (Type: ${userId.runtimeType})',
       );
-      if (userId == null || !(userId is String) || (userId as String).isEmpty) {
+      if (userId == null || userId is! String || (userId).isEmpty) {
         setState(() {
           errorMessage =
               'User ID is missing, invalid, or empty from database. Please check DB.';
@@ -60,7 +60,7 @@ class _LoginScreenState extends State<LoginScreen> {
         print('LOGIN_DEBUG: User ID from DB is null or not String, or empty.');
         return;
       }
-      final String finalUserId = userId as String;
+      final String finalUserId = userId;
       print(
         'LOGIN_DEBUG: Final userId to pass from Login: "$finalUserId" (length: ${finalUserId.length})',
       );

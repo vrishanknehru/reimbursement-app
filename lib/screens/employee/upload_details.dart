@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_application_1/screens/employee/employee_home.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:path_provider/path_provider.dart'; // Required for getTemporaryDirectory
 
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -110,7 +110,7 @@ class _UploadDetailsState extends State<UploadDetails> {
     try {
       final userId = widget.userId;
 
-      if (userId == null || userId.isEmpty) {
+      if (userId.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -153,9 +153,10 @@ class _UploadDetailsState extends State<UploadDetails> {
         return;
       }
 
+      // 1. Upload Original Image File
       String uploadFileName =
           'bill_${DateTime.now().millisecondsSinceEpoch}.${widget.imageFile!.path.split('.').last.toLowerCase()}';
-      String storageFilePath = 'bills/${userId}/$uploadFileName';
+      String storageFilePath = 'bills/$userId/$uploadFileName';
       print('DEBUG_UPLOAD: Full storage file path: $storageFilePath');
 
       try {
@@ -164,28 +165,29 @@ class _UploadDetailsState extends State<UploadDetails> {
             .upload(storageFilePath, widget.imageFile!);
 
         print(
-          'DEBUG_UPLOAD: Raw response from supabase.storage.upload: $uploadedFileNameResponse',
+          'DEBUG_UPLOAD: Raw response from supabase.storage.upload (original): $uploadedFileNameResponse',
         );
 
-        if (uploadedFileNameResponse == null ||
-            uploadedFileNameResponse.isEmpty) {
+        if (uploadedFileNameResponse.isEmpty) {
           throw Exception(
-            'Supabase Storage upload returned empty or null path.',
+            'Supabase Storage upload returned empty or null path for original image.',
           );
         }
 
         publicUrl = supabase.storage
             .from('receipts')
             .getPublicUrl(storageFilePath);
-        print('DEBUG_UPLOAD: Public URL generated: $publicUrl');
+        print('DEBUG_UPLOAD: Public URL generated (original): $publicUrl');
       } on StorageException catch (se) {
         print(
-          'DEBUG_UPLOAD: StorageException caught during upload: ${se.message} (Status: ${se.statusCode})',
+          'DEBUG_UPLOAD: StorageException caught during original image upload: ${se.message} (Status: ${se.statusCode})',
         );
-        throw Exception('Storage upload error: ${se.message}');
+        throw Exception(
+          'Storage upload error for original image: ${se.message}',
+        );
       } catch (e) {
-        print('DEBUG_UPLOAD: Unexpected error during file upload: $e');
-        throw Exception('File upload failed: ${e.toString()}');
+        print('DEBUG_UPLOAD: Unexpected error during original file upload: $e');
+        throw Exception('Original file upload failed: ${e.toString()}');
       }
 
       // 2. Generate and Upload Generated PDF
@@ -196,21 +198,33 @@ class _UploadDetailsState extends State<UploadDetails> {
         );
 
         final generatedPdfBytes = await _generatePdfBytesFromDetails();
-        String generatedPdfFileName =
-            'generated_bill_${DateTime.now().millisecondsSinceEpoch}.pdf';
+
+        // Save the Uint8List to a temporary file
+        final tempDir = await getTemporaryDirectory();
+        final generatedPdfFile = File(
+          '${tempDir.path}/generated_bill_${DateTime.now().millisecondsSinceEpoch}.pdf',
+        );
+        await generatedPdfFile.writeAsBytes(
+          generatedPdfBytes,
+        ); // Write bytes to a File
+
+        String generatedPdfFileName = generatedPdfFile.path.split('/').last;
         String generatedPdfStoragePath =
-            'generated_pdfs/${userId}/$generatedPdfFileName'; // Separate folder for generated PDFs
+            'generated_pdfs/$userId/$generatedPdfFileName'; // Separate folder for generated PDFs
 
         final uploadedGeneratedPdfResponse = await supabase.storage
             .from('receipts')
             .upload(
               generatedPdfStoragePath,
-              generatedPdfBytes as File,
+              generatedPdfFile, // Correct: Pass the File object
               fileOptions: const FileOptions(contentType: 'application/pdf'),
             ); // Explicitly set content type
 
-        if (uploadedGeneratedPdfResponse == null ||
-            uploadedGeneratedPdfResponse.isEmpty) {
+        print(
+          'DEBUG_UPLOAD: Raw response from supabase.storage.upload (generated PDF): $uploadedGeneratedPdfResponse',
+        );
+
+        if (uploadedGeneratedPdfResponse.isEmpty) {
           throw Exception(
             'Supabase Storage upload for generated PDF returned empty or null path.',
           );
@@ -225,25 +239,29 @@ class _UploadDetailsState extends State<UploadDetails> {
           'DEBUG_UPLOAD: StorageException caught during generated PDF upload: ${se.message} (Status: ${se.statusCode})',
         );
         generatedPdfPublicUrl = null; // Set to null if upload fails
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "Warning: Failed to upload generated PDF: ${se.message}",
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                "Warning: Failed to upload generated PDF: ${se.message}",
+              ),
             ),
-          ),
-        );
+          );
+        }
       } catch (e) {
         print(
           'DEBUG_UPLOAD: Unexpected error during generated PDF creation/upload: $e',
         );
         generatedPdfPublicUrl = null;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "Warning: Failed to create/upload generated PDF: ${e.toString()}",
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                "Warning: Failed to create/upload generated PDF: ${e.toString()}",
+              ),
             ),
-          ),
-        );
+          );
+        }
       }
 
       // 3. Insert Bill Details into Database
@@ -641,8 +659,8 @@ class _UploadDetailsState extends State<UploadDetails> {
             onError: (error) {
               print('DEBUG: PDFView in preview error: $error');
             },
-            onRender: (_pages) {
-              print('DEBUG: PDF preview rendered $_pages pages');
+            onRender: (pages) {
+              print('DEBUG: PDF preview rendered $pages pages');
             },
           ),
         ),
@@ -658,7 +676,7 @@ class _UploadDetailsState extends State<UploadDetails> {
           const Icon(Icons.insert_drive_file, size: 80, color: Colors.grey),
           const SizedBox(height: 8),
           Text(
-            '${file.path.split('/').last}',
+            file.path.split('/').last,
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 14, color: Colors.black54),
           ),

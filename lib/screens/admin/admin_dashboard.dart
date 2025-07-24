@@ -293,7 +293,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 ),
                               ),
                               Text(
-                                "Claimed: ${formattedClaimDate} | Source: ${bill['source'] ?? 'N/A'}",
+                                "Claimed: $formattedClaimDate | Source: ${bill['source'] ?? 'N/A'}",
                                 style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey,

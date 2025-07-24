@@ -5,7 +5,6 @@ import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:flutter_application_1/screens/employee/network_image_viewer_page.dart';
 import 'package:flutter_application_1/screens/employee/network_pdf_viewer_page.dart';
 
 class BillViewerPage extends StatefulWidget {

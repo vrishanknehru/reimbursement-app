@@ -5,7 +5,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:google_ml_kit/google_ml_kit.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class TakeImagePage extends StatefulWidget {
   final String userId; // Passed from EmployeeHome

@@ -246,7 +246,7 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Claimed: ${formattedClaimDate} | Purpose: ${entry['purpose'] ?? 'N/A'} | Source: ${entry['source'] ?? 'N/A'}",
+                          "Claimed: $formattedClaimDate | Purpose: ${entry['purpose'] ?? 'N/A'} | Source: ${entry['source'] ?? 'N/A'}",
                           style: const TextStyle(fontSize: 11),
                         ),
                         Text(
@@ -317,8 +317,8 @@ class _EmployeeHomeState extends State<EmployeeHome> {
           );
           _checkUserAndFetchBills();
         },
-        child: const Icon(Icons.add),
         tooltip: 'Add New Bill',
+        child: const Icon(Icons.add),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endDocked,
     );
