@@ -1,15 +1,20 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/screens/employee/local_image_viewer.dart';
+import 'package:flutter_application_1/screens/employee/local_pdf_viewer.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_application_1/screens/employee/employee_home.dart';
+import 'package:flutter_pdfview/flutter_pdfview.dart'; 
+import 'package:path_provider/path_provider.dart'; 
 
 class UploadDetails extends StatefulWidget {
   final String? scannedAmount;
   final String? scannedInvoice;
   final String? scannedDate;
   final File? imageFile;
+  final String userId;
   final String userEmail;
 
   const UploadDetails({
@@ -18,6 +23,7 @@ class UploadDetails extends StatefulWidget {
     this.scannedInvoice,
     this.scannedDate,
     this.imageFile,
+    required this.userId,
     required this.userEmail,
   });
 
@@ -68,27 +74,24 @@ class _UploadDetailsState extends State<UploadDetails> {
     });
 
     final supabase = Supabase.instance.client;
-    String? userId;
     String? publicUrl;
 
     try {
-      final userResponse = await supabase
-          .from('users')
-          .select('id')
-          .eq('email', widget.userEmail)
-          .maybeSingle();
+      final userId = widget.userId;
 
-      if (userResponse == null || userResponse['id'] == null) {
+      if (userId == null || userId.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text("User ID not found for this email. Cannot submit."),
+              content: Text(
+                "Error: User ID missing for submission. Please try logging in again.",
+              ),
             ),
           );
         }
+        print('DEBUG_UPLOAD: Aborting submission because userId is empty.');
         return;
       }
-      userId = userResponse['id'] as String;
 
       if (_selectedPurpose == null ||
           _selectedSource == null ||
@@ -119,18 +122,40 @@ class _UploadDetailsState extends State<UploadDetails> {
         return;
       }
 
-      final uploadedFileName = await supabase.storage
-          .from('receipts')
-          .upload(
-            'bills/${userId}/${DateTime.now().millisecondsSinceEpoch}.jpg',
-            widget.imageFile!,
-          );
+      String uploadFileName =
+          'bill_${DateTime.now().millisecondsSinceEpoch}.${widget.imageFile!.path.split('.').last.toLowerCase()}';
+      String storageFilePath = 'bills/${userId}/$uploadFileName';
+      print('DEBUG_UPLOAD: Full storage file path: $storageFilePath');
 
-      publicUrl = supabase.storage
-          .from('receipts')
-          .getPublicUrl(
-            'bills/${userId}/${DateTime.now().millisecondsSinceEpoch}.jpg',
+      try {
+        final uploadedFileNameResponse = await supabase.storage
+            .from('receipts')
+            .upload(storageFilePath, widget.imageFile!);
+
+        print(
+          'DEBUG_UPLOAD: Raw response from supabase.storage.upload: $uploadedFileNameResponse',
+        );
+
+        if (uploadedFileNameResponse == null ||
+            uploadedFileNameResponse.isEmpty) {
+          throw Exception(
+            'Supabase Storage upload returned empty or null path.',
           );
+        }
+
+        publicUrl = supabase.storage
+            .from('receipts')
+            .getPublicUrl(storageFilePath);
+        print('DEBUG_UPLOAD: Public URL generated: $publicUrl');
+      } on StorageException catch (se) {
+        print(
+          'DEBUG_UPLOAD: StorageException caught during upload: ${se.message} (Status: ${se.statusCode})',
+        );
+        throw Exception('Storage upload error: ${se.message}');
+      } catch (e) {
+        print('DEBUG_UPLOAD: Unexpected error during file upload: $e');
+        throw Exception('File upload failed: ${e.toString()}');
+      }
 
       final dbResponse = await supabase.from('bills').insert({
         'user_id': userId,
@@ -152,7 +177,8 @@ class _UploadDetailsState extends State<UploadDetails> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => EmployeeHome(email: widget.userEmail),
+            builder: (_) =>
+                EmployeeHome(userId: userId, email: widget.userEmail),
           ),
         );
       }
@@ -164,7 +190,7 @@ class _UploadDetailsState extends State<UploadDetails> {
         ).showSnackBar(SnackBar(content: Text("Database error: ${e.message}")));
       }
     } catch (e) {
-      print('Upload failed: Unexpected error: $e');
+      print('Upload failed: Unexpected top-level error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Upload failed: ${e.toString()}")),
@@ -207,7 +233,6 @@ class _UploadDetailsState extends State<UploadDetails> {
                 onChanged: (value) => setState(() => _selectedPurpose = value),
               ),
               const SizedBox(height: 16),
-
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(
                   labelText: "Source of Payment",
@@ -220,7 +245,6 @@ class _UploadDetailsState extends State<UploadDetails> {
                 onChanged: (value) => setState(() => _selectedSource = value),
               ),
               const SizedBox(height: 16),
-
               TextFormField(
                 controller: _dateController,
                 readOnly: true,
@@ -244,7 +268,6 @@ class _UploadDetailsState extends State<UploadDetails> {
                 },
               ),
               const SizedBox(height: 16),
-
               TextFormField(
                 controller: _invoiceController,
                 decoration: const InputDecoration(
@@ -253,7 +276,6 @@ class _UploadDetailsState extends State<UploadDetails> {
                 ),
               ),
               const SizedBox(height: 16),
-
               TextFormField(
                 controller: _amountController,
                 keyboardType: const TextInputType.numberWithOptions(
@@ -268,7 +290,6 @@ class _UploadDetailsState extends State<UploadDetails> {
                 ),
               ),
               const SizedBox(height: 16),
-
               TextFormField(
                 controller: _descriptionController,
                 maxLines: 3,
@@ -279,17 +300,68 @@ class _UploadDetailsState extends State<UploadDetails> {
               ),
               const SizedBox(height: 24),
 
-              // Image preview at the bottom of the form
+              // Image/PDF preview at the bottom of the form, now tappable
               if (widget.imageFile != null)
+                GestureDetector(
+                  onTap: () {
+                    String fileExtension = widget.imageFile!.path
+                        .split('.')
+                        .last
+                        .toLowerCase();
+                    if (fileExtension == 'jpg' ||
+                        fileExtension == 'jpeg' ||
+                        fileExtension == 'png') {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => LocalImageViewerPage(
+                            imageFile: widget.imageFile!,
+                          ),
+                        ),
+                      );
+                    } else if (fileExtension == 'pdf') {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              LocalPdfViewerPage(pdfFile: widget.imageFile!),
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            "Tap to view not available for this file type.",
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  child: Container(
+                    height: 200,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey),
+                    ),
+                    child: _buildFilePreview(widget.imageFile!),
+                  ),
+                )
+              else
                 Container(
                   height: 200,
                   width: double.infinity,
+                  alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey),
+                    border: Border.all(
+                      color: Colors.grey,
+                      style: BorderStyle.solid,
+                    ), // Changed from dashed to solid
+                    color: Colors.grey[100],
                   ),
-                  child: _buildFilePreview(
-                    widget.imageFile!,
-                  ), // This helper handles basic image/PDF
+                  child: const Text(
+                    'No image selected for preview',
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 ),
               const SizedBox(height: 24),
 
@@ -306,26 +378,44 @@ class _UploadDetailsState extends State<UploadDetails> {
     );
   }
 
-  // Helper to build file preview (handles basic image/PDF icon)
   Widget _buildFilePreview(File file) {
+    print('DEBUG: _buildFilePreview called for: ${file.path}');
+    if (!file.existsSync()) {
+      print(
+        'DEBUG: _buildFilePreview: File does NOT exist at path: ${file.path}',
+      );
+      return const Center(
+        child: Text(
+          'File not found for preview',
+          style: TextStyle(color: Colors.red),
+        ),
+      );
+    }
+
     String fileExtension = file.path.split('.').last.toLowerCase();
 
     if (fileExtension == 'pdf') {
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.picture_as_pdf, size: 80, color: Colors.redAccent),
-          const SizedBox(height: 8),
-          Text(
-            '${file.path.split('/').last}',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 14, color: Colors.black54),
+      return IgnorePointer(
+        // Ignore pointer events on PDFView so GestureDetector can catch taps
+        ignoring: true,
+        child: SizedBox(
+          height: 200, // Constrain height
+          width: double.infinity,
+          child: PDFView(
+            filePath: file.path, // Use the local file path directly
+            enableSwipe: true,
+            swipeHorizontal: false, // Vertical swipe for small preview
+            autoSpacing: true,
+            pageFling: true,
+            pageSnap: true,
+            onError: (error) {
+              print('DEBUG: PDFView in preview error: $error');
+            },
+            onRender: (_pages) {
+              print('DEBUG: PDF preview rendered $_pages pages');
+            },
           ),
-          const Text(
-            '(PDF Preview Not Available)', // Will show this for PDFs
-            style: TextStyle(fontSize: 12, color: Colors.grey),
-          ),
-        ],
+        ),
       );
     } else if (fileExtension == 'jpg' ||
         fileExtension == 'jpeg' ||

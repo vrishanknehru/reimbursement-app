@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class HistoryPage extends StatefulWidget {
   final String email;
 
-  const HistoryPage({super.key, required this.email});
+  const HistoryPage({super.key, required this.email, required String userId});
 
   @override
   State<HistoryPage> createState() => _HistoryPageState();

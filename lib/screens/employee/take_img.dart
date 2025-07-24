@@ -9,9 +9,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'upload_details.dart';
 
 class TakeImagePage extends StatefulWidget {
-  final String userEmail;
+  final String userId; // Passed from EmployeeHome
+  final String userEmail; // Passed from EmployeeHome
 
-  const TakeImagePage({super.key, required this.userEmail});
+  const TakeImagePage({super.key, required this.userId, required this.userEmail});
 
   @override
   State<TakeImagePage> createState() => _TakeImagePageState();
@@ -20,6 +21,11 @@ class TakeImagePage extends StatefulWidget {
 class _TakeImagePageState extends State<TakeImagePage> {
   final ImagePicker _imagePicker = ImagePicker();
   bool _isProcessing = false;
+
+  @override
+  void initState() {
+    super.initState();
+  }
 
   Future<void> _pickAndProcessFile(
     BuildContext context, {
@@ -63,9 +69,9 @@ class _TakeImagePageState extends State<TakeImagePage> {
 
       if (selectedFile == null) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('No file selected.')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No file selected.')),
+          );
         }
         return;
       }
@@ -74,100 +80,34 @@ class _TakeImagePageState extends State<TakeImagePage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Selected file does not exist on device.'),
-            ),
+                content: Text('Selected file does not exist on device.')),
           );
         }
         return;
       }
 
       String? scannedAmount;
-      String? scannedInvoice;
+      String? scannedInvoice; // This will always be null
       String? scannedDate;
 
       // --- OCR PROCESSING LOGIC ---
-      // For images, perform OCR. For PDFs, skip OCR (backend will handle).
       if (fileExtension == 'jpg' ||
           fileExtension == 'jpeg' ||
           fileExtension == 'png') {
         print('DEBUG: Performing OCR on image file: ${selectedFile.path}');
         final inputImage = InputImage.fromFile(selectedFile);
         final textRecognizer = GoogleMlKit.vision.textRecognizer();
-        final RecognizedText recognizedText = await textRecognizer.processImage(
-          inputImage,
-        );
+        final RecognizedText recognizedText =
+            await textRecognizer.processImage(inputImage);
         await textRecognizer.close();
 
         String rawText = recognizedText.text;
         print("DEBUG: Extracted Text from OCR:\n$rawText");
 
-        // Refined OCR parsing logic
-        RegExp totalKeywords = RegExp(
-          r'\b(total|amount|sum|grand total|balance due)\b',
-          caseSensitive: false,
-        );
-        RegExp amountPattern = RegExp(
-          r'\b(?:[\$€£¥]\s*)?(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?)\b',
-          caseSensitive: false,
-        );
-
-        String lowerRawText = rawText.toLowerCase();
-        List<String> lines = rawText.split('\n');
-
-        for (int i = 0; i < lines.length; i++) {
-          if (totalKeywords.hasMatch(lines[i].toLowerCase())) {
-            for (int j = i; j < i + 3 && j < lines.length; j++) {
-              Iterable<Match> matches = amountPattern.allMatches(lines[j]);
-              if (matches.isNotEmpty) {
-                String potentialAmount = matches.last.group(1)!;
-                potentialAmount = potentialAmount.replaceAll(',', '.');
-                if (double.tryParse(potentialAmount) != null) {
-                  scannedAmount = potentialAmount;
-                  break;
-                }
-              }
-            }
-            if (scannedAmount != null) break;
-          }
-        }
-        if (scannedAmount == null) {
-          Iterable<Match> allAmountMatches = amountPattern.allMatches(rawText);
-          if (allAmountMatches.isNotEmpty) {
-            List<double> possibleAmounts = [];
-            for (var match in allAmountMatches) {
-              String val = match.group(1)!.replaceAll(',', '.');
-              if (double.tryParse(val) != null) {
-                possibleAmounts.add(double.parse(val));
-              }
-            }
-            if (possibleAmounts.isNotEmpty) {
-              scannedAmount = possibleAmounts
-                  .reduce((a, b) => a > b ? a : b)
-                  .toString();
-            }
-          }
-        }
-
-        RegExp invoicePattern = RegExp(
-          r'\b(?:invoice|inv|bill|#|no\.?|ref\.?)\s*[:#]?\s*([a-zA-Z0-9-]{3,})\b',
-          caseSensitive: false,
-          multiLine: true,
-        );
-        Match? invoiceMatch = invoicePattern.firstMatch(rawText);
-        if (invoiceMatch != null) {
-          scannedInvoice = invoiceMatch.group(1);
-        } else {
-          RegExp fallbackNumberPattern = RegExp(r'\b\d{6,}\b');
-          Match? fallbackMatch = fallbackNumberPattern.firstMatch(rawText);
-          if (fallbackMatch != null) {
-            scannedInvoice = fallbackMatch.group(0);
-          }
-        }
-
+        // Date: Robust parsing for MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD
         RegExp datePattern = RegExp(
-          r'\b(\d{4}[/-]\d{1,2}[/-]\d{1,2})|' +
-              r'\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})|' +
-              r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},\s+\d{4}\b',
+          r'\b(\d{4}[/-]\d{1,2}[/-]\d{1,2})|' r'\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})|' + // MM/DD/YY, DD-MM-YYYY, etc.
+              r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},\s+\d{4}\b', // Month DD, YYYY
           caseSensitive: false,
         );
         Match? dateMatch = datePattern.firstMatch(rawText);
@@ -197,18 +137,58 @@ class _TakeImagePageState extends State<TakeImagePage> {
             }
           }
         }
-      } else if (fileExtension == 'pdf') {
-        print(
-          'DEBUG: PDF selected. Client-side OCR will be skipped. User will fill details manually.',
+
+        // Amount: Refined to find the largest amount, now explicitly excluding phone numbers.
+        RegExp amountPattern = RegExp(
+          r'(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?)', // Matches numbers with optional thousands separators and decimals
+          caseSensitive: false,
         );
+        // Pattern to identify sequences that look like phone numbers within the text
+        RegExp phoneLikePattern = RegExp(
+            r'\b(?:\+\d{1,3}[\s-]*)?(?:\d{2,4}[-\s]?){2,}\d{2,4}\b', // e.g., +1 234-567-8900, 215 658 98 75
+            caseSensitive: false
+        );
+
+        List<double> foundAmounts = [];
+        Iterable<Match> allAmountMatches = amountPattern.allMatches(rawText);
+        for (var match in allAmountMatches) {
+          String? value = match.group(1);
+          if (value != null) {
+            String contextAroundMatch = rawText.substring(
+                (match.start - 15).clamp(0, rawText.length),
+                (match.end + 15).clamp(0, rawText.length)
+            );
+            
+            if (!phoneLikePattern.hasMatch(contextAroundMatch)) {
+              value = value.replaceAll(',', '.').trim();
+              double? parsedValue = double.tryParse(value);
+              if (parsedValue != null) {
+                foundAmounts.add(parsedValue);
+              }
+            } else {
+                print('DEBUG: Excluded potential phone number component from amount: ${match.group(0)} (Context: "$contextAroundMatch")');
+            }
+          }
+        }
+
+        if (foundAmounts.isNotEmpty) {
+          foundAmounts.sort((a, b) => b.compareTo(a));
+          scannedAmount = foundAmounts.first.toString();
+          print('DEBUG: Found amounts (filtered): $foundAmounts');
+          print('DEBUG: Selected largest amount: $scannedAmount');
+        } else {
+          scannedAmount = null;
+          print('DEBUG: No valid amounts found by OCR.');
+        }
+
+      } else if (fileExtension == 'pdf') {
+        print('DEBUG: PDF selected. Client-side OCR will be skipped. User will fill details manually.');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('PDF selected. Please fill details manually.'),
-            ),
+                content: Text('PDF selected. Please fill details manually.')),
           );
         }
-        // scannedAmount, scannedInvoice, scannedDate remain null for PDFs
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -222,12 +202,12 @@ class _TakeImagePageState extends State<TakeImagePage> {
         return;
       }
 
-      // Navigate to UploadDetails, always passing the ORIGINAL selectedFile
       _navigateToUploadDetails(
         scannedAmount: scannedAmount,
-        scannedInvoice: scannedInvoice,
+        scannedInvoice: scannedInvoice, // This is explicitly null
         scannedDate: scannedDate,
         imageFile: selectedFile,
+        userId: widget.userId,
         userEmail: widget.userEmail,
       );
     } catch (e) {
@@ -249,6 +229,7 @@ class _TakeImagePageState extends State<TakeImagePage> {
     String? scannedInvoice,
     String? scannedDate,
     required File imageFile,
+    required String userId,
     required String userEmail,
   }) {
     if (mounted) {
@@ -260,6 +241,7 @@ class _TakeImagePageState extends State<TakeImagePage> {
             scannedInvoice: scannedInvoice,
             scannedDate: scannedDate,
             imageFile: imageFile,
+            userId: userId,
             userEmail: userEmail,
           ),
         ),

@@ -3,12 +3,14 @@ import 'package:flutter_application_1/screens/employee/take_img.dart';
 import 'package:flutter_application_1/screens/employee/history_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_application_1/screens/login_page.dart';
-// REMOVED: import 'package:flutter_application_1/screens/employee/bill_viewer_page.dart';
+import 'package:flutter_application_1/screens/employee/bill_viewer_page.dart'; // Import BillViewerPage
+import 'package:intl/intl.dart'; // Import for date formatting
 
 class EmployeeHome extends StatefulWidget {
+  final String userId;
   final String email;
 
-  const EmployeeHome({super.key, required this.email});
+  const EmployeeHome({super.key, required this.userId, required this.email});
 
   @override
   State<EmployeeHome> createState() => _EmployeeHomeState();
@@ -22,26 +24,26 @@ class _EmployeeHomeState extends State<EmployeeHome> {
   @override
   void initState() {
     super.initState();
-    _checkRoleAndFetchBills();
+    // --- DEBUGGING PRINT ---
+    print(
+      'EMPLOYEE_HOME_DEBUG: Initial userId received: "${widget.userId}" (length: ${widget.userId.length})',
+    );
+    // --- END DEBUGGING PRINT ---
+    _checkUserAndFetchBills();
   }
 
-  Future<void> _checkRoleAndFetchBills() async {
+  Future<void> _checkUserAndFetchBills() async {
     setState(() {
       isLoading = true;
     });
 
     try {
-      final userResponse = await supabase
-          .from('users')
-          .select('id, role')
-          .eq('email', widget.email)
-          .maybeSingle();
-
-      if (userResponse == null) {
+      if (widget.userId.isEmpty) {
+        // This check is already there, but now we'll see the print before it.
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text("User not found. Please log in again."),
+              content: Text("Invalid user ID received. Please log in again."),
             ),
           );
           _navigateToLogin();
@@ -49,15 +51,20 @@ class _EmployeeHomeState extends State<EmployeeHome> {
         return;
       }
 
-      final userId = userResponse['id'] as String;
-      final role = userResponse['role']?.toString().toLowerCase();
+      final userResponse = await supabase
+          .from('users')
+          .select('id, role')
+          .eq('id', widget.userId)
+          .eq('email', widget.email)
+          .maybeSingle();
 
-      if (role != 'employee') {
+      if (userResponse == null ||
+          userResponse['role']?.toString().toLowerCase() != 'employee') {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+            const SnackBar(
               content: Text(
-                "Access Denied: Your role is '$role', not an employee.",
+                "Authentication/Role invalid. Please log in again.",
               ),
             ),
           );
@@ -66,7 +73,8 @@ class _EmployeeHomeState extends State<EmployeeHome> {
         return;
       }
 
-      // Ensure 'image_url' is selected (even if not used for direct viewing on this page, it's in DB)
+      final userId = userResponse['id'] as String;
+
       final billsResponse = await supabase
           .from('bills')
           .select(
@@ -93,7 +101,7 @@ class _EmployeeHomeState extends State<EmployeeHome> {
     }
   }
 
-  void _navigateToLogin() {
+  void _navigateToLogin() async {
     if (mounted) {
       Navigator.pushAndRemoveUntil(
         context,
@@ -124,7 +132,7 @@ class _EmployeeHomeState extends State<EmployeeHome> {
             const Spacer(),
             IconButton(
               icon: const Icon(Icons.refresh),
-              onPressed: _checkRoleAndFetchBills,
+              onPressed: _checkUserAndFetchBills,
               tooltip: 'Refresh',
             ),
           ],
@@ -162,6 +170,25 @@ class _EmployeeHomeState extends State<EmployeeHome> {
               itemCount: userBills.length,
               itemBuilder: (context, index) {
                 final entry = userBills[index];
+
+                // Format created_at date for title
+                String formattedDate = 'N/A';
+                if (entry['created_at'] != null) {
+                  try {
+                    final DateTime parsedCreatedAt = DateTime.parse(
+                      entry['created_at'],
+                    );
+                    formattedDate = DateFormat(
+                      'MMM dd, yyyy',
+                    ).format(parsedCreatedAt);
+                  } catch (e) {
+                    print("Error parsing created_at for display: $e");
+                    formattedDate = entry['created_at'].toString().split(
+                      'T',
+                    )[0]; // Fallback
+                  }
+                }
+
                 return Card(
                   margin: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -169,31 +196,35 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                   ),
                   child: ListTile(
                     dense: true,
-                    title: Text(
-                      "${entry['purpose'] ?? 'N/A'} - ${entry['source'] ?? 'N/A'}",
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
+                    title: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          formattedDate,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        Text(
+                          entry['description'] ?? 'No Description',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
                     ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Date: ${entry['date'] ?? 'N/A'}",
-                          style: const TextStyle(fontSize: 12),
+                          "${entry['purpose'] ?? 'N/A Purpose'} | ${entry['source'] ?? 'N/A Source'}",
+                          style: const TextStyle(fontSize: 11),
                         ),
                         Text(
-                          "Invoice: ${entry['invoice_no'] ?? 'N/A'}",
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        Text(
-                          "Amount: \$${(entry['amount'] as num?)?.toStringAsFixed(2) ?? 'N/A'}",
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        Text(
-                          "Desc: ${entry['description'] ?? 'N/A'}",
-                          style: const TextStyle(fontSize: 12),
+                          "Amount: \$${(entry['amount'] as num?)?.toStringAsFixed(2) ?? 'N/A'} | Invoice: ${entry['invoice_no'] ?? 'N/A'}",
+                          style: const TextStyle(fontSize: 11),
                         ),
                       ],
                     ),
@@ -201,14 +232,24 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                       entry['status']?.toString() ?? 'processing',
                     ),
                     onTap: () {
-                      // This was the state before BillViewerPage: simple SnackBar
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            "Tapped on bill. Bill viewer not implemented.",
+                      final billUrl = entry['image_url'];
+                      if (billUrl != null) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                BillViewerPage(billData: entry),
                           ),
-                        ),
-                      );
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              "No bill image/PDF found for this entry.",
+                            ),
+                          ),
+                        );
+                      }
                     },
                   ),
                 );
@@ -225,7 +266,8 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => HistoryPage(email: widget.email),
+                    builder: (context) =>
+                        HistoryPage(userId: widget.userId, email: widget.email),
                   ),
                 );
               },
@@ -238,13 +280,14 @@ class _EmployeeHomeState extends State<EmployeeHome> {
           await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => TakeImagePage(userEmail: widget.email),
+              builder: (context) =>
+                  TakeImagePage(userId: widget.userId, userEmail: widget.email),
             ),
           );
-          _checkRoleAndFetchBills();
+          _checkUserAndFetchBills();
         },
-        child: const Icon(Icons.add),
         tooltip: 'Add New Bill',
+        child: const Icon(Icons.add),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endDocked,
     );

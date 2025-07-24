@@ -17,7 +17,9 @@ class _LoginScreenState extends State<LoginScreen> {
   bool isLoading = false;
   String errorMessage = '';
 
-  Future<void> loginUser() async {
+  final supabase = Supabase.instance.client;
+
+  Future<void> _signIn() async {
     setState(() {
       isLoading = true;
       errorMessage = '';
@@ -25,12 +27,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
-    final supabase = Supabase.instance.client;
 
     try {
       final response = await supabase
           .from('users')
-          .select()
+          .select('id, role')
           .eq('email', email)
           .eq('password', password)
           .maybeSingle();
@@ -42,30 +43,59 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
+      final userId = response['id']; // userId is dynamic type here
       final role = response['role']?.toString().toLowerCase();
 
-      if (role == 'admin') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const AdminDashboard()),
-        );
-      } else if (role == 'employee') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => EmployeeHome(email: email)),
-        );
-      } else {
+      // --- DEBUGGING PRINTS ---
+      print(
+        'LOGIN_DEBUG: Raw user ID from DB: $userId (Type: ${userId.runtimeType})',
+      );
+      if (userId == null || userId is! String || (userId).isEmpty) {
+        // Check if null, not string, OR empty string
         setState(() {
-          errorMessage = 'Unknown user role';
+          errorMessage =
+              'User ID is missing, invalid, or empty from database. Please check DB.';
         });
+        print('LOGIN_DEBUG: User ID from DB is null or not String, or empty.');
+        return;
       }
+      final String finalUserId = userId; // Safely cast after check
+      print(
+        'LOGIN_DEBUG: Final userId to pass from Login: "$finalUserId" (length: ${finalUserId.length})',
+      );
+      // --- END DEBUGGING PRINTS ---
+
+      _handleNavigation(role, finalUserId, email);
     } catch (e) {
       setState(() {
-        errorMessage = 'Login failed. Please try again.';
+        errorMessage = 'Login failed. Please try again: ${e.toString()}';
       });
+      print('LOGIN_DEBUG: Sign-in caught exception: $e');
     } finally {
       setState(() {
         isLoading = false;
+      });
+    }
+  }
+
+  void _handleNavigation(String? role, String userId, String email) {
+    if (role == 'admin') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => AdminDashboard(userId: userId, email: email),
+        ),
+      );
+    } else if (role == 'employee') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => EmployeeHome(userId: userId, email: email),
+        ),
+      );
+    } else {
+      setState(() {
+        errorMessage = 'Unknown user role. Please contact support.';
       });
     }
   }
@@ -129,7 +159,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 10),
                       MaterialButton(
                         minWidth: double.infinity,
-                        onPressed: isLoading ? null : loginUser,
+                        onPressed: isLoading ? null : _signIn,
                         color: Colors.black,
                         textColor: Colors.white,
                         shape: RoundedRectangleBorder(
