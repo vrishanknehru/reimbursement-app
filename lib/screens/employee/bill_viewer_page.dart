@@ -5,11 +5,18 @@ import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:flutter_application_1/screens/employee/network_image_viewer_page.dart';
+import 'package:flutter_application_1/screens/employee/network_pdf_viewer_page.dart';
 
 class BillViewerPage extends StatefulWidget {
   final Map<String, dynamic> billData;
+  final bool isAdmin; // NEW: Flag to indicate if the viewer is admin
 
-  const BillViewerPage({super.key, required this.billData});
+  const BillViewerPage({
+    super.key,
+    required this.billData,
+    this.isAdmin = false, // Default to false if not provided
+  });
 
   @override
   State<BillViewerPage> createState() => _BillViewerPageState();
@@ -30,6 +37,7 @@ class _BillViewerPageState extends State<BillViewerPage> {
   late String _description;
   late String _status;
   late String _claimedAtDateOnly;
+  late String _adminNotes; // NEW: To store admin remarks
 
   @override
   void initState() {
@@ -43,6 +51,8 @@ class _BillViewerPageState extends State<BillViewerPage> {
     _description = widget.billData['description'] ?? 'N/A';
     _status = widget.billData['status']?.toString().toUpperCase() ?? 'UNKNOWN';
     _billUrl = widget.billData['image_url'] ?? '';
+    _adminNotes =
+        widget.billData['admin_notes'] ?? ''; // NEW: Extract admin_notes
 
     if (widget.billData['created_at'] != null) {
       try {
@@ -159,11 +169,15 @@ class _BillViewerPageState extends State<BillViewerPage> {
                     _buildDetailRow('Claim Sent At', _claimedAtDateOnly),
                     _buildDetailRow('Purpose', _purpose),
                     _buildDetailRow('Source', _source),
-                    _buildDetailRow('Amount', '\$$_amount'),
+                    _buildDetailRow('Amount', '\$${_amount}'),
                     _buildDetailRow('Bill Date', _billDate),
                     _buildDetailRow('Invoice No.', _invoiceNo),
                     _buildDetailRow('Description', _description),
                     _buildDetailRow('Status', _status),
+                    // NEW: Display Admin Notes if available and applicable
+                    if (_adminNotes.isNotEmpty &&
+                        (_status == 'REJECTED' || widget.isAdmin))
+                      _buildDetailRow('Admin Remarks', _adminNotes),
                   ],
                 ),
               ),
@@ -193,27 +207,44 @@ class _BillViewerPageState extends State<BillViewerPage> {
                             ],
                           )
                         : _localPdfPath != null
-                        ? SizedBox(
-                            height: 400,
-                            child: PDFView(
-                              filePath: _localPdfPath!,
-                              enableSwipe: true,
-                              swipeHorizontal: true,
-                              autoSpacing: false,
-                              pageFling: false,
-                              pageSnap: false,
-                              onError: (error) {
-                                print('DEBUG: PDFView error: $error');
-                                setState(() {
-                                  _pdfError = 'Error rendering PDF: $error';
-                                });
-                              },
-                              onRender: (pages) {
-                                print('DEBUG: PDF rendered $pages pages');
-                              },
-                              onViewCreated: (PDFViewController vc) {
-                                print('DEBUG: PDFView created');
-                              },
+                        ? GestureDetector(
+                            onTap: () {
+                              if (_billUrl.isNotEmpty) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        NetworkPdfViewerPage(pdfUrl: _billUrl),
+                                  ),
+                                );
+                              }
+                            },
+                            child: IgnorePointer(
+                              ignoring: true,
+                              child: SizedBox(
+                                height:
+                                    MediaQuery.of(context).size.height * 0.7,
+                                child: PDFView(
+                                  filePath: _localPdfPath!,
+                                  enableSwipe: true,
+                                  swipeHorizontal: true,
+                                  autoSpacing: false,
+                                  pageFling: true,
+                                  pageSnap: true,
+                                  onError: (error) {
+                                    print('DEBUG: PDFView error: $error');
+                                    setState(() {
+                                      _pdfError = 'Error rendering PDF: $error';
+                                    });
+                                  },
+                                  onRender: (_pages) {
+                                    print('DEBUG: PDF rendered $_pages pages');
+                                  },
+                                  onViewCreated: (PDFViewController vc) {
+                                    print('DEBUG: PDFView created');
+                                  },
+                                ),
+                              ),
                             ),
                           )
                         : Text(

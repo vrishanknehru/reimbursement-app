@@ -3,8 +3,8 @@ import 'package:flutter_application_1/screens/employee/take_img.dart';
 import 'package:flutter_application_1/screens/employee/history_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_application_1/screens/login_page.dart';
-import 'package:flutter_application_1/screens/employee/bill_viewer_page.dart'; // Import BillViewerPage
-import 'package:intl/intl.dart'; // Import for date formatting
+import 'package:flutter_application_1/screens/employee/bill_viewer_page.dart';
+import 'package:intl/intl.dart';
 
 class EmployeeHome extends StatefulWidget {
   final String userId;
@@ -24,11 +24,6 @@ class _EmployeeHomeState extends State<EmployeeHome> {
   @override
   void initState() {
     super.initState();
-    // --- DEBUGGING PRINT ---
-    print(
-      'EMPLOYEE_HOME_DEBUG: Initial userId received: "${widget.userId}" (length: ${widget.userId.length})',
-    );
-    // --- END DEBUGGING PRINT ---
     _checkUserAndFetchBills();
   }
 
@@ -38,19 +33,6 @@ class _EmployeeHomeState extends State<EmployeeHome> {
     });
 
     try {
-      if (widget.userId.isEmpty) {
-        // This check is already there, but now we'll see the print before it.
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Invalid user ID received. Please log in again."),
-            ),
-          );
-          _navigateToLogin();
-        }
-        return;
-      }
-
       final userResponse = await supabase
           .from('users')
           .select('id, role')
@@ -73,14 +55,12 @@ class _EmployeeHomeState extends State<EmployeeHome> {
         return;
       }
 
-      final userId = userResponse['id'] as String;
-
       final billsResponse = await supabase
           .from('bills')
           .select(
-            'purpose, source, amount, date, invoice_no, description, status, created_at, image_url',
-          )
-          .eq('user_id', userId)
+            'purpose, source, amount, date, invoice_no, description, status, created_at, image_url, admin_notes',
+          ) // NEW: Select admin_notes
+          .eq('user_id', widget.userId)
           .order('created_at', ascending: false)
           .limit(5);
 
@@ -171,7 +151,6 @@ class _EmployeeHomeState extends State<EmployeeHome> {
               itemBuilder: (context, index) {
                 final entry = userBills[index];
 
-                // Format created_at date for title
                 String formattedDate = 'N/A';
                 if (entry['created_at'] != null) {
                   try {
@@ -185,7 +164,7 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                     print("Error parsing created_at for display: $e");
                     formattedDate = entry['created_at'].toString().split(
                       'T',
-                    )[0]; // Fallback
+                    )[0];
                   }
                 }
 
@@ -237,8 +216,11 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) =>
-                                BillViewerPage(billData: entry),
+                            builder: (context) => BillViewerPage(
+                              billData: entry,
+                              isAdmin:
+                                  false, // NEW: Pass isAdmin false for employee view
+                            ),
                           ),
                         );
                       } else {
@@ -286,8 +268,8 @@ class _EmployeeHomeState extends State<EmployeeHome> {
           );
           _checkUserAndFetchBills();
         },
-        tooltip: 'Add New Bill',
         child: const Icon(Icons.add),
+        tooltip: 'Add New Bill',
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endDocked,
     );

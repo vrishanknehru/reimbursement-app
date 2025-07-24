@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-// REMOVED: import 'package:flutter_application_1/screens/employee/bill_viewer_page.dart';
+import 'package:flutter_application_1/screens/employee/bill_viewer_page.dart';
+import 'package:intl/intl.dart';
 
 class HistoryPage extends StatefulWidget {
+  final String userId;
   final String email;
 
-  const HistoryPage({super.key, required this.email, required String userId});
+  const HistoryPage({super.key, required this.userId, required this.email});
 
   @override
   State<HistoryPage> createState() => _HistoryPageState();
@@ -30,27 +32,29 @@ class _HistoryPageState extends State<HistoryPage> {
     });
 
     try {
-      final userResponse = await supabase
-          .from('users')
-          .select('id')
-          .eq('email', widget.email)
-          .maybeSingle();
+      final userId = widget.userId;
 
-      if (userResponse == null || userResponse['id'] == null) {
+      if (userId == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                "User not logged in or ID missing. Cannot load history.",
+              ),
+            ),
+          );
+        }
         setState(() {
-          _errorMessage = "User ID not found. Cannot load history.";
           _isLoading = false;
         });
         return;
       }
 
-      final userId = userResponse['id'] as String;
-
       final billsResponse = await supabase
           .from('bills')
           .select(
-            'purpose, source, amount, date, invoice_no, description, status, created_at, image_url',
-          )
+            'purpose, source, amount, date, invoice_no, description, status, created_at, image_url, admin_notes',
+          ) // NEW: Select admin_notes
           .eq('user_id', userId)
           .order('created_at', ascending: false);
 
@@ -104,6 +108,24 @@ class _HistoryPageState extends State<HistoryPage> {
               itemCount: _allUserBills.length,
               itemBuilder: (context, index) {
                 final entry = _allUserBills[index];
+
+                String formattedDate = 'N/A';
+                if (entry['created_at'] != null) {
+                  try {
+                    final DateTime parsedCreatedAt = DateTime.parse(
+                      entry['created_at'],
+                    );
+                    formattedDate = DateFormat(
+                      'MMM dd, yyyy',
+                    ).format(parsedCreatedAt);
+                  } catch (e) {
+                    print("Error parsing created_at for display: $e");
+                    formattedDate = entry['created_at'].toString().split(
+                      'T',
+                    )[0];
+                  }
+                }
+
                 return Card(
                   margin: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -111,31 +133,35 @@ class _HistoryPageState extends State<HistoryPage> {
                   ),
                   child: ListTile(
                     dense: true,
-                    title: Text(
-                      "${entry['purpose'] ?? 'N/A'} - ${entry['source'] ?? 'N/A'}",
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
+                    title: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          formattedDate,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        Text(
+                          entry['description'] ?? 'No Description',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
                     ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Date: ${entry['date'] ?? 'N/A'}",
-                          style: const TextStyle(fontSize: 12),
+                          "${entry['purpose'] ?? 'N/A Purpose'} | ${entry['source'] ?? 'N/A Source'}",
+                          style: const TextStyle(fontSize: 11),
                         ),
                         Text(
-                          "Invoice: ${entry['invoice_no'] ?? 'N/A'}",
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        Text(
-                          "Amount: \$${(entry['amount'] as num?)?.toStringAsFixed(2) ?? 'N/A'}",
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        Text(
-                          "Desc: ${entry['description'] ?? 'N/A'}",
-                          style: const TextStyle(fontSize: 12),
+                          "Amount: \$${(entry['amount'] as num?)?.toStringAsFixed(2) ?? 'N/A'} | Invoice: ${entry['invoice_no'] ?? 'N/A'}",
+                          style: const TextStyle(fontSize: 11),
                         ),
                       ],
                     ),
@@ -143,14 +169,27 @@ class _HistoryPageState extends State<HistoryPage> {
                       entry['status']?.toString() ?? 'processing',
                     ),
                     onTap: () {
-                      // REVERTED: Original onTap for BillViewerPage removed
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            "Tapped on bill. Bill viewer not implemented.",
+                      final billUrl = entry['image_url'];
+                      if (billUrl != null) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => BillViewerPage(
+                              billData: entry,
+                              isAdmin:
+                                  false, // NEW: Pass isAdmin false for employee view
+                            ),
                           ),
-                        ),
-                      );
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              "No bill image/PDF found for this entry.",
+                            ),
+                          ),
+                        );
+                      }
                     },
                   ),
                 );

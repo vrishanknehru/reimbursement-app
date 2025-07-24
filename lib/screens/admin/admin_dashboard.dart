@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_application_1/screens/login_page.dart';
 import 'package:flutter_application_1/screens/employee/bill_viewer_page.dart';
+import 'package:intl/intl.dart';
 
 class AdminDashboard extends StatefulWidget {
-  final String userId; // Admin's User ID from custom auth
-  final String email; // Admin's email from custom auth
+  final String userId;
+  final String email;
 
   const AdminDashboard({super.key, required this.userId, required this.email});
 
@@ -18,6 +19,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
   List<Map<String, dynamic>> allBills = [];
   bool isLoading = true;
   String? errorMessage;
+
+  Map<String, String> userEmails = {};
 
   @override
   void initState() {
@@ -32,7 +35,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     });
 
     try {
-      // Verify admin role from 'users' table using passed userId and email
       final userResponse = await supabase
           .from('users')
           .select('role')
@@ -53,12 +55,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
         return;
       }
 
-      // Fetch all bills from the 'bills' table (admins can see all)
-      // Including image_url for BillViewerPage
+      final usersData = await supabase.from('users').select('id, email');
+      userEmails = {
+        for (var user in usersData)
+          user['id'] as String: user['email'] as String,
+      };
+
       final billsResponse = await supabase
           .from('bills')
           .select(
-            'id, user_id, purpose, amount, date, status, image_url, source, invoice_no, description, created_at',
+            'id, user_id, purpose, amount, date, status, image_url, source, invoice_no, description, created_at, admin_notes',
           )
           .order('created_at', ascending: false);
 
@@ -75,19 +81,76 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
-  Future<void> _updateBillStatus(String billId, String newStatus) async {
+  Future<void> _updateBillStatusWithRemarks(
+    String billId,
+    String newStatus,
+  ) async {
+    final TextEditingController remarksController = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Add Remarks for ${newStatus.toUpperCase()}'),
+          content: TextField(
+            controller: remarksController,
+            decoration: const InputDecoration(hintText: "Optional remarks"),
+            maxLines: 3,
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('Submit'),
+              onPressed: () async {
+                Navigator.of(context).pop(); // Close dialog
+                await _performStatusUpdate(
+                  billId,
+                  newStatus,
+                  remarksController.text,
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _performStatusUpdate(
+    String billId,
+    String newStatus,
+    String remarks,
+  ) async {
     setState(() {
-      isLoading = true; // Show loading while updating
+      isLoading = true;
     });
     try {
       final dbResponse = await supabase
           .from('bills')
-          .update({'status': newStatus})
+          .update({'status': newStatus, 'admin_notes': remarks})
           .eq('id', billId);
 
-      if (dbResponse.error != null) {
-        throw dbResponse.error!;
+      // --- FIX START: Handle dbResponse being null on success ---
+      if (dbResponse == null) {
+        // If dbResponse is null but no exception was thrown, assume success
+        print(
+          'DEBUG: DB Update returned null response but no error was thrown. Assuming success.',
+        );
+      } else if (dbResponse.error != null) {
+        // If dbResponse is not null but contains an error
+        print(
+          'DEBUG: DB Update returned non-null response with error: ${dbResponse.error!.message}',
+        );
+        throw dbResponse.error!; // Re-throw the explicit error
+      } else {
+        // dbResponse is not null and has no error, explicit success
+        print('DEBUG: DB Update returned successful response.');
       }
+      // --- FIX END ---
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -103,7 +166,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         );
       }
       setState(() {
-        isLoading = false; // Stop loading on error
+        isLoading = false;
       });
     }
   }
@@ -124,7 +187,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         return const Icon(Icons.check_circle, color: Colors.green);
       case 'rejected':
         return const Icon(Icons.cancel, color: Colors.red);
-      default: // For 'pending', 'processing', etc.
+      default:
         return const Icon(Icons.hourglass_top, color: Colors.orange);
     }
   }
@@ -162,6 +225,26 @@ class _AdminDashboardState extends State<AdminDashboard> {
               itemCount: allBills.length,
               itemBuilder: (context, index) {
                 final bill = allBills[index];
+                final String employeeEmail =
+                    userEmails[bill['user_id']] ?? 'Unknown User';
+
+                String formattedClaimDate = 'N/A';
+                if (bill['created_at'] != null) {
+                  try {
+                    final DateTime parsedCreatedAt = DateTime.parse(
+                      bill['created_at'],
+                    );
+                    formattedClaimDate = DateFormat(
+                      'MMM dd, yyyy',
+                    ).format(parsedCreatedAt);
+                  } catch (e) {
+                    print("Error parsing created_at for admin display: $e");
+                    formattedClaimDate = bill['created_at'].toString().split(
+                      'T',
+                    )[0];
+                  }
+                }
+
                 return Card(
                   margin: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -174,19 +257,41 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         ListTile(
-                          title: Text(
-                            "${bill['purpose'] ?? 'N/A Purpose'} - \$${(bill['amount'] as num?)?.toStringAsFixed(2) ?? 'N/A'}",
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          title: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                employeeEmail,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              Text(
+                                '\$${(bill['amount'] as num?)?.toStringAsFixed(2) ?? 'N/A'}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
                           ),
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Date: ${bill['date'] ?? 'N/A'}'),
                               Text(
-                                'Status: ${bill['status']?.toUpperCase() ?? 'N/A'}',
+                                bill['description'] ?? 'No Description',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey,
+                                ),
                               ),
                               Text(
-                                'Submitted by User ID: ${bill['user_id'] ?? 'N/A'}',
+                                "Claimed: ${formattedClaimDate} | Source: ${bill['source'] ?? 'N/A'}",
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey,
+                                ),
                               ),
                             ],
                           ),
@@ -199,8 +304,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) =>
-                                      BillViewerPage(billData: bill),
+                                  builder: (context) => BillViewerPage(
+                                    billData: bill,
+                                    isAdmin:
+                                        true, // Pass isAdmin true for admin view
+                                  ),
                                 ),
                               );
                             } else {
@@ -220,16 +328,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              // --- FIX START ---
                               bill['status'] == 'pending'
                                   ? Row(
-                                      // Wrap the two buttons in a Row
                                       children: [
                                         ElevatedButton.icon(
-                                          onPressed: () => _updateBillStatus(
-                                            bill['id'],
-                                            'approved',
-                                          ),
+                                          onPressed: () =>
+                                              _updateBillStatusWithRemarks(
+                                                bill['id'],
+                                                'approved',
+                                              ),
                                           icon: const Icon(Icons.check),
                                           label: const Text('Approve'),
                                           style: ElevatedButton.styleFrom(
@@ -238,10 +345,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                         ),
                                         const SizedBox(width: 8),
                                         ElevatedButton.icon(
-                                          onPressed: () => _updateBillStatus(
-                                            bill['id'],
-                                            'rejected',
-                                          ),
+                                          onPressed: () =>
+                                              _updateBillStatusWithRemarks(
+                                                bill['id'],
+                                                'rejected',
+                                              ),
                                           icon: const Icon(Icons.close),
                                           label: const Text('Reject'),
                                           style: ElevatedButton.styleFrom(
@@ -251,7 +359,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                       ],
                                     )
                                   : Text(
-                                      // Just display status if not pending
                                       'Status: ${bill['status']?.toUpperCase() ?? 'N/A'}',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
@@ -260,7 +367,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                             : Colors.red,
                                       ),
                                     ),
-                              // --- FIX END ---
                             ],
                           ),
                         ),
