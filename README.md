@@ -57,12 +57,6 @@ To get a copy of this project up and running locally, follow these steps.
 
 -----
 
-### Project Status & Future Plans
-
-This project is a work in progress. The current focus is on building a robust employee-side experience and the core backend for submissions. The next major milestone is to finalize the admin dashboard and implement an email notification system for approvals using a Supabase Edge Function.
-
------
-
 ### Made with love by Vrishank Nehru
 
 *Feel free to star the repo if you found it useful\!*
