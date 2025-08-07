@@ -2,17 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/screens/login_page.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await dotenv.load();
 
   await Hive.initFlutter();
   await Hive.openBox('userBox');
 
   await Supabase.initialize(
-    url: 'https://ahhtejzpkdfkneawvtuy.supabase.co',
-    anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFoaHRlanpwa2Rma25lYXd2dHV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI4MTg3NjMsImV4cCI6MjA2ODM5NDc2M30.Nkl1IJMjziOnp6qH0tCO4M4qJ_l08tCgJNwdw4rND_Y',
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
 
   runApp(const MyApp());
